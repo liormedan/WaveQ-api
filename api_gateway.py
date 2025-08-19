@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,9 +8,12 @@ import json
 import os
 import uuid
 from datetime import datetime
-import tempfile
 import shutil
 from pathlib import Path
+try:
+    import redis.asyncio as redis
+except ImportError:  # pragma: no cover - redis is optional
+    redis = None
 
 # MQTT client for communication with MCP server
 import asyncio_mqtt as aiomqtt
@@ -35,18 +38,30 @@ MCP_MQTT_BROKER = os.getenv("MCP_MQTT_BROKER", "localhost")
 MCP_MQTT_PORT = int(os.getenv("MCP_MQTT_PORT", "1883"))
 UPLOAD_DIR = "uploads"
 PROCESSED_DIR = "processed"
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Ensure directories exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
 
+if redis:
+    redis_client = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+else:
+    redis_client = None
+
 # Request models
-class AudioEditRequest(BaseModel):
+class AudioOperation(BaseModel):
     operation: str
-    parameters: Dict[str, Any]
+    parameters: Dict[str, Any] = {}
+
+
+class AudioEditRequest(BaseModel):
+    file_path: str
+    operations: List[AudioOperation]
     client_id: Optional[str] = None
     priority: Optional[str] = "normal"
     description: Optional[str] = ""
+
 
 class AudioEditResponse(BaseModel):
     request_id: str
@@ -55,6 +70,7 @@ class AudioEditResponse(BaseModel):
     timestamp: str
     estimated_completion: Optional[str] = None
 
+
 class ProcessingStatus(BaseModel):
     request_id: str
     status: str
@@ -62,6 +78,16 @@ class ProcessingStatus(BaseModel):
     progress: Optional[float] = None
     result: Optional[Dict[str, Any]] = None
     timestamp: str
+
+
+class ChatRequest(BaseModel):
+    messages: List[Dict[str, Any]]
+    client_id: Optional[str] = None
+
+
+async def parse_request(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Placeholder parser for LLM chat requests"""
+    return {"parsed": True, "input": payload}
 
 # MQTT Client for MCP communication
 class MCPClient:
@@ -142,6 +168,34 @@ mcp_client = MCPClient()
 # Request tracking
 active_requests = {}
 
+
+async def save_request(request_id: str, data: Dict[str, Any]):
+    """Save request data to memory and Redis if available"""
+    active_requests[request_id] = data
+    if redis_client:
+        try:
+            await redis_client.set(f"request:{request_id}", json.dumps(data))
+        except Exception as e:  # pragma: no cover - redis optional
+            print(f"Redis save error: {e}")
+
+
+async def get_request(request_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve request data from Redis or memory"""
+    if redis_client:
+        try:
+            stored = await redis_client.get(f"request:{request_id}")
+            if stored:
+                return json.loads(stored)
+        except Exception as e:  # pragma: no cover
+            print(f"Redis get error: {e}")
+    return active_requests.get(request_id)
+
+
+async def update_request(request_id: str, **fields):
+    data = await get_request(request_id) or {}
+    data.update(fields)
+    await save_request(request_id, data)
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize MCP client on startup"""
@@ -153,107 +207,82 @@ async def shutdown_event():
     await mcp_client.disconnect()
 
 @app.post("/api/audio/edit", response_model=AudioEditResponse)
-async def submit_audio_edit(
-    audio_file: UploadFile = File(...),
-    operation: str = Form(...),
-    parameters: str = Form("{}"),
-    client_id: Optional[str] = Form(None),
-    priority: str = Form("normal"),
-    description: str = Form("")
-):
-    """
-    Submit an audio editing request from n8n
-    
-    This endpoint receives audio files and processing requests from n8n workflows
-    and forwards them to the MCP server for processing.
-    """
+async def submit_audio_edit(request: AudioEditRequest):
+    """Submit an audio editing request via JSON body"""
     try:
-        # Generate unique request ID
         request_id = str(uuid.uuid4())
-        
-        # Parse parameters
-        try:
-            params_dict = json.loads(parameters) if parameters else {}
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid parameters JSON")
-        
-        # Validate operation
-        supported_operations = [
-            "trim", "normalize", "fade_in", "fade_out", "change_speed",
-            "change_pitch", "add_reverb", "noise_reduction", "equalize",
-            "compress", "merge", "split", "convert_format"
-        ]
-        
-        if operation not in supported_operations:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Unsupported operation. Supported: {', '.join(supported_operations)}"
-            )
-        
-        # Save uploaded file
-        file_extension = Path(audio_file.filename).suffix
-        saved_filename = f"{request_id}{file_extension}"
-        file_path = os.path.join(UPLOAD_DIR, saved_filename)
-        
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(audio_file.file, buffer)
-        
-        # Create request payload
+
         payload = {
             "request_id": request_id,
-            "operation": operation,
-            "audio_data": file_path,
-            "parameters": params_dict,
-            "client_id": client_id,
-            "priority": priority,
-            "description": description,
-            "timestamp": datetime.now().isoformat()
+            "operations": [op.dict() for op in request.operations],
+            "audio_path": request.file_path,
+            "client_id": request.client_id,
+            "priority": request.priority,
+            "description": request.description,
+            "timestamp": datetime.now().isoformat(),
         }
-        
-        # Track request
-        active_requests[request_id] = {
+
+        request_info = {
             "status": "submitted",
-            "file_path": file_path,
+            "file_path": request.file_path,
             "payload": payload,
-            "submitted_at": datetime.now(),
-            "client_id": client_id
+            "submitted_at": datetime.now().isoformat(),
+            "client_id": request.client_id,
         }
-        
-        # Submit to MCP server
+
+        await save_request(request_id, request_info)
+
         success = await mcp_client.publish_request(request_id, payload)
-        
         if not success:
             raise HTTPException(status_code=500, detail="Failed to submit to MCP server")
-        
-        # Subscribe to status updates
+
         await mcp_client.subscribe_to_status(request_id)
-        
+
         return AudioEditResponse(
             request_id=request_id,
             status="submitted",
             message="Audio edit request submitted successfully",
             timestamp=datetime.now().isoformat(),
-            estimated_completion=None
+            estimated_completion=None,
         )
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+
+
+@app.post("/api/llm/chat")
+async def llm_chat(request: ChatRequest):
+    """Handle chat requests for LLM processing"""
+    request_id = str(uuid.uuid4())
+    payload = request.dict()
+    await save_request(
+        request_id,
+        {
+            "status": "submitted",
+            "payload": payload,
+            "submitted_at": datetime.now().isoformat(),
+            "client_id": request.client_id,
+        },
+    )
+
+    result = await parse_request(payload)
+    await update_request(request_id, status="completed", result=result)
+
+    return {"request_id": request_id, "response": result}
 
 @app.get("/api/audio/status/{request_id}", response_model=ProcessingStatus)
 async def get_processing_status(request_id: str):
     """Get the current status of an audio processing request"""
-    if request_id not in active_requests:
+    request_info = await get_request(request_id)
+    if not request_info:
         raise HTTPException(status_code=404, detail="Request not found")
-    
-    request_info = active_requests[request_id]
-    
+
     return ProcessingStatus(
         request_id=request_id,
-        status=request_info["status"],
-        message=f"Request {request_info['status']}",
-        progress=None,
-        result=None,
-        timestamp=request_info["submitted_at"].isoformat()
+        status=request_info.get("status", "unknown"),
+        message=f"Request {request_info.get('status', 'unknown')}",
+        progress=request_info.get("progress"),
+        result=request_info.get("result"),
+        timestamp=request_info.get("submitted_at", datetime.now().isoformat()),
     )
 
 @app.get("/api/audio/requests")
@@ -275,7 +304,7 @@ async def list_requests(
             "request_id": req_id,
             "status": req_info["status"],
             "client_id": req_info["client_id"],
-            "submitted_at": req_info["submitted_at"].isoformat(),
+            "submitted_at": req_info["submitted_at"],
             "file_path": req_info["file_path"]
         })
     
@@ -291,10 +320,9 @@ async def list_requests(
 @app.get("/api/audio/download/{request_id}")
 async def download_processed_audio(request_id: str):
     """Download the processed audio file"""
-    if request_id not in active_requests:
+    request_info = await get_request(request_id)
+    if not request_info:
         raise HTTPException(status_code=404, detail="Request not found")
-    
-    request_info = active_requests[request_id]
     
     if request_info["status"] != "completed":
         raise HTTPException(status_code=400, detail="Audio processing not completed")
@@ -318,21 +346,18 @@ async def download_processed_audio(request_id: str):
 @app.delete("/api/audio/requests/{request_id}")
 async def cancel_request(request_id: str):
     """Cancel a pending audio processing request"""
-    if request_id not in active_requests:
+    request_info = await get_request(request_id)
+    if not request_info:
         raise HTTPException(status_code=404, detail="Request not found")
-    
-    request_info = active_requests[request_id]
-    
-    if request_info["status"] in ["completed", "failed", "cancelled"]:
+
+    if request_info.get("status") in ["completed", "failed", "cancelled"]:
         raise HTTPException(status_code=400, detail="Cannot cancel completed/failed request")
-    
-    # Update status
-    request_info["status"] = "cancelled"
-    
-    # Clean up file
-    if os.path.exists(request_info["file_path"]):
+
+    await update_request(request_id, status="cancelled")
+
+    if os.path.exists(request_info.get("file_path", "")):
         os.remove(request_info["file_path"])
-    
+
     return {"message": "Request cancelled successfully", "request_id": request_id}
 
 @app.get("/api/audio/operations")
