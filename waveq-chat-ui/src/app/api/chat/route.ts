@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Initialize Gemini AI - try to get API key from request headers first, then from env
 export async function POST(request: NextRequest) {
   try {
     const { message, audioFile, chatHistory } = await request.json()
@@ -21,10 +20,6 @@ export async function POST(request: NextRequest) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey)
-
-export async function POST(request: NextRequest) {
-  try {
-    const { message, audioFile, chatHistory } = await request.json()
 
     // Create a chat model
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
@@ -61,13 +56,38 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     })
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Gemini API Error:', error)
+    
+    // Check if it's an API key error
+    if (error.message && error.message.includes('API key not valid')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'מפתח API לא תקין',
+          fallback: 'המפתח API שהכנסת לא תקין. אנא בדוק אותו ונסה שוב, או צור מפתח חדש ב-Google AI Studio.'
+        },
+        { status: 400 }
+      )
+    }
+    
+    // Check if it's a network error
+    if (error.message && error.message.includes('fetch')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'בעיית חיבור לאינטרנט',
+          fallback: 'יש בעיה בחיבור לאינטרנט. אנא בדוק את החיבור שלך ונסה שוב.'
+        },
+        { status: 500 }
+      )
+    }
+    
     return NextResponse.json(
       {
         success: false,
         error: 'שגיאה בתקשורת עם Gemini AI',
-        fallback: 'אני מצטער, יש בעיה בתקשורת. אני כאן כדי לעזור עם עיבוד אודיו!'
+        fallback: 'אני מצטער, יש בעיה בתקשורת. אנא נסה שוב או בדוק את מפתח ה-API.'
       },
       { status: 500 }
     )

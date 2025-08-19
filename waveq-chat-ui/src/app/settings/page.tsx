@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Settings, Key, Bot, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { Settings, Key, Bot, CheckCircle, AlertCircle, Eye, EyeOff, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SettingsPage() {
@@ -38,6 +38,7 @@ export default function SettingsPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-gemini-api-key': apiKey
         },
         body: JSON.stringify({
           message: 'בדיקת חיבור',
@@ -46,20 +47,21 @@ export default function SettingsPage() {
         })
       })
 
-      if (response.ok) {
-        // Save to localStorage
-        localStorage.setItem('GEMINI_API_KEY', apiKey)
-        setStatus('success')
-        setStatusMessage('מפתח API נשמר בהצלחה!')
-        
-        // Clear message after 3 seconds
-        setTimeout(() => {
-          setStatus('idle')
-          setStatusMessage('')
-        }, 3000)
-      } else {
-        throw new Error('API test failed')
-      }
+             if (response.ok) {
+         // Save to localStorage
+         localStorage.setItem('GEMINI_API_KEY', apiKey)
+         setStatus('success')
+         setStatusMessage('מפתח API נשמר בהצלחה!')
+         
+         // Clear message after 3 seconds
+         setTimeout(() => {
+           setStatus('idle')
+           setStatusMessage('')
+         }, 3000)
+       } else {
+         const errorData = await response.json()
+         throw new Error(errorData.fallback || 'API test failed')
+       }
     } catch (error) {
       setStatus('error')
       setStatusMessage('שגיאה בבדיקת מפתח API. אנא ודא שהמפתח תקין')
@@ -118,9 +120,14 @@ export default function SettingsPage() {
         {/* Navigation */}
         <div className="flex justify-center mb-8">
           <Link href="/">
-            <Button variant="outline" className="flex items-center gap-2">
-              <Bot className="w-4 h-4" />
-              חזרה לצ'אט
+            <Button variant="outline" className="flex items-center gap-3 px-8 py-4 border-2 hover:border-purple-500 transition-all duration-200">
+              <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                <Bot className="w-6 h-6 text-purple-600" />
+              </div>
+              <div className="text-right">
+                <div className="font-medium">חזרה לצ'אט</div>
+                <div className="text-xs text-gray-500">דף הבית</div>
+              </div>
             </Button>
           </Link>
         </div>
@@ -180,20 +187,32 @@ export default function SettingsPage() {
               )}
 
               {/* Action Buttons */}
-              <div className="flex gap-3">
+              <div className="flex gap-4">
                 <Button
                   onClick={handleSaveApiKey}
                   disabled={isLoading || !apiKey.trim()}
-                  className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-14 flex items-center gap-3 justify-center"
                 >
-                  {isLoading ? 'בודק...' : 'שמור ובדוק'}
+                  <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+                    <Key className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium">{isLoading ? 'בודק...' : 'שמור ובדוק'}</div>
+                    <div className="text-xs opacity-80">אימות המפתח</div>
+                  </div>
                 </Button>
                 <Button
                   onClick={handleClearApiKey}
                   variant="outline"
-                  className="px-6"
+                  className="h-14 px-8 border-2 hover:border-red-500 transition-all duration-200 flex items-center gap-3"
                 >
-                  נקה
+                  <div className="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center">
+                    <Trash2 className="w-6 h-6 text-red-500" />
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium">נקה</div>
+                    <div className="text-xs text-gray-500">מחיקת המפתח</div>
+                  </div>
                 </Button>
               </div>
             </CardContent>
