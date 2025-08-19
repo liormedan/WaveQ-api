@@ -150,11 +150,11 @@
                                                         class="text-blue-600 hover:text-blue-900" title="התחל עיבוד">
                                                     <i class="fas fa-play"></i>
                                                 </button>
-                                                <button x-show="request.status === 'completed'" 
-                                                        @click="downloadResult(request.request_id)"
-                                                        class="text-green-600 hover:text-green-900" title="הורד תוצאה">
+                                                <a x-show="request.status === 'completed'"
+                                                   :href="'/api/requests/' + request.request_id + '/download'"
+                                                   class="text-green-600 hover:text-green-900" title="הורד תוצאה">
                                                     <i class="fas fa-download"></i>
-                                                </button>
+                                                </a>
                                                 <button @click="viewRequestDetails(request)"
                                                         class="text-purple-600 hover:text-purple-900" title="פרטי בקשה">
                                                     <i class="fas fa-eye"></i>
@@ -387,14 +387,6 @@
                     } catch (error) {
                         console.error('Error processing request:', error);
                         alert('שגיאה בעיבוד הבקשה');
-                    }
-                },
-                
-                downloadResult(requestId) {
-                    const request = this.requests.find(r => r.request_id === requestId);
-                    if (request && request.result_file) {
-                        alert(`הורדת קובץ: ${request.result_file}`);
-                        // In real app, implement actual download
                     }
                 },
                 
