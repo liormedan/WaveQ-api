@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi import status
 import uvicorn
 from pathlib import Path
@@ -66,6 +66,15 @@ async def settings_page(request: Request):
 async def analytics_page(request: Request):
     return templates.TemplateResponse("analytics.html", {"request": request})
 
+# Chat routes
+@app.get("/chat", response_class=HTMLResponse)
+async def chat_page(request: Request):
+    return templates.TemplateResponse("chat.html", {"request": request})
+
+@app.post("/chat")
+async def handle_chat(file: UploadFile = File(...), message: str = Form(...)):
+    return {"filename": file.filename, "message": message}
+
 # API endpoint for n8n to submit audio editing requests
 @app.post("/api/audio-edit")
 async def submit_audio_edit_request(
@@ -118,6 +127,29 @@ async def get_all_requests():
         })
     
     return {"requests": requests_data, "total": len(requests_data)}
+
+# Get request status
+@app.get("/api/requests/{request_id}/status")
+async def get_request_status(request_id: str):
+    for req in api_requests:
+        if req.request_id == request_id:
+            return {
+                "request_id": req.request_id,
+                "status": req.status,
+                "result_file": req.result_file,
+            }
+    raise HTTPException(status_code=404, detail="Request not found")
+
+# Download processed file
+@app.get("/api/requests/{request_id}/download")
+async def download_processed_file(request_id: str):
+    for req in api_requests:
+        if req.request_id == request_id and req.result_file:
+            file_path = Path(req.result_file)
+            if file_path.exists():
+                return FileResponse(file_path, filename=file_path.name)
+            raise HTTPException(status_code=404, detail="File not found")
+    raise HTTPException(status_code=404, detail="Request not found")
 
 # Update request status
 @app.put("/api/requests/{request_id}/status")

@@ -46,7 +46,8 @@ class AudioProcessingMCP:
             "compress": self.compress_audio,
             "merge": self.merge_audio_files,
             "split": self.split_audio,
-            "convert_format": self.convert_format
+            "convert_format": self.convert_format,
+            "process_operations": self.process_operations_handler
         }
     
     def setup_logging(self):
@@ -75,8 +76,8 @@ class AudioProcessingMCP:
                 port=self.mqtt_port,
                 identifier=self.client_id
             ) as client:
-                await client.subscribe("audio/requests/#")
-                await client.subscribe("audio/status/#")
+                # Listen for edit requests
+                await client.subscribe("audio/edit")
                 
                 self.logger.info("Connected to MQTT broker and subscribed to topics")
                 
@@ -105,7 +106,7 @@ class AudioProcessingMCP:
                         "payload": payload
                     })
                     
-                    if topic.startswith("audio/requests/"):
+                    if topic == "audio/edit":
                         await self.processing_queue.put({
                             "topic": topic,
                             "payload": payload,
@@ -218,8 +219,45 @@ class AudioProcessingMCP:
     async def publish_result(self, client, request_id: str, result: Dict[str, Any]):
         """Publish processing result to MQTT"""
         await client.publish(f"audio/results/{request_id}", json.dumps(result))
-    
+
     # Audio Processing Methods
+    async def process_operations_handler(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Wrapper to process a sequence of operations from parameters"""
+        operations = parameters.get("operations", [])
+        result_path = await self.process_operations(audio_path, operations)
+        return {"output_path": result_path, "operations": operations}
+
+    async def process_operations(self, file_path: str, operations: List[Dict[str, Any]]) -> str:
+        """Apply multiple audio operations sequentially using Pydub/FFmpeg"""
+        if not operations:
+            raise ValueError("No operations provided")
+
+        audio = AudioSegment.from_file(file_path)
+
+        for op in operations:
+            name = op.get("name")
+            if name == "trim":
+                start = int(op.get("start", 0) * 1000)
+                end = int(op.get("end", len(audio) / 1000) * 1000)
+                audio = audio[start:end]
+            elif name == "fade_in":
+                duration = int(op.get("duration", 1000))
+                audio = audio.fade_in(duration)
+            elif name == "fade_out":
+                duration = int(op.get("duration", 1000))
+                audio = audio.fade_out(duration)
+            elif name == "normalize":
+                audio = audio.normalize()
+            else:
+                raise ValueError(f"Unsupported operation: {name}")
+
+        output_dir = Path("processed")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"{Path(file_path).stem}_processed.wav"
+        audio.export(output_path, format="wav")
+
+        return str(output_path)
+
     async def trim_audio(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Trim audio file to specified start and end times"""
         start_time = parameters.get("start_time", 0)  # seconds
