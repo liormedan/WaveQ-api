@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { ChatInterface } from '@/components/chat-interface'
 import { Button } from '@/components/ui/button'
-import { Settings, Sun, Moon, Key, Bot } from 'lucide-react'
+import { Settings, Sun, Moon, Key, Bot, Music, Scissors, FileAudio } from 'lucide-react'
 
 export default function Home() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
@@ -22,6 +22,18 @@ export default function Home() {
     console.log('Changing theme from', theme, 'to', newTheme)
     setTheme(newTheme)
     localStorage.setItem('WAVEQ_THEME', newTheme)
+  }
+
+  // Handle new chat - clear history and return to chat page
+  const handleNewChat = () => {
+    // Clear chat history from localStorage
+    localStorage.removeItem('WAVEQ_CHAT_HISTORY')
+    
+    // Return to chat page
+    setCurrentPage('chat')
+    
+    // Force page refresh to clear chat interface
+    window.location.reload()
   }
 
   console.log('Current theme:', theme)
@@ -241,6 +253,81 @@ export default function Home() {
 
           {/* Sidebar Content */}
           <div className="p-4 space-y-4">
+            {/* New Chat Button - Top Priority */}
+            <div className="space-y-3">
+              <Button 
+                variant="outline" 
+                onClick={handleNewChat}
+                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-green-500 transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
+                  <Bot className="w-5 h-5 text-green-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium">צ'אט חדש</div>
+                  <div className="text-xs text-gray-400">התחלת שיחה חדשה</div>
+                </div>
+              </Button>
+            </div>
+
+            {/* Audio Processing Tools */}
+            <div className="space-y-3">
+              <Button 
+                variant="outline" 
+                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-blue-500 transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                  <Music className="w-5 h-5 text-blue-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium">כלי עיבוד אודיו</div>
+                  <div className="text-xs text-gray-400">עריכה והשפעות מתקדמות</div>
+                </div>
+              </Button>
+
+              <Button 
+                variant="outline" 
+                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-red-500 transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
+                  <Scissors className="w-5 h-5 text-red-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium">חיתוך אודיו</div>
+                  <div className="text-xs text-gray-400">בחירת קטעים וזמנים</div>
+                </div>
+              </Button>
+
+              <Button 
+                variant="outline" 
+                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-indigo-500 transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                  <FileAudio className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium">המרת פורמט</div>
+                  <div className="text-xs text-gray-400">שינוי סוג קובץ ואיכות</div>
+                </div>
+              </Button>
+            </div>
+
             {/* Theme Toggle */}
             <div className="space-y-3">
               <Button
@@ -297,42 +384,24 @@ export default function Home() {
               </Button>
             </div>
 
-            {/* Quick Actions */}
+            {/* System Settings */}
             <div className="space-y-3">
-              <div className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-green-500 transition-all duration-200 ${
-                    theme === 'dark' 
-                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
-                    <Bot className="w-5 h-5 text-green-500" />
-                  </div>
-                  <div className="text-left">
-                    <div className="font-medium">צ'אט חדש</div>
-                    <div className="text-xs text-gray-400">התחלת שיחה חדשה</div>
-                  </div>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-blue-500 transition-all duration-200 ${
-                    theme === 'dark' 
-                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                    <Settings className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div className="text-left">
-                    <div className="font-medium">הגדרות מערכת</div>
-                    <div className="text-xs text-gray-400">הגדרות כלליות</div>
-                  </div>
-                </Button>
-              </div>
+              <Button 
+                variant="outline" 
+                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-blue-500 transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                  <Settings className="w-5 h-5 text-blue-500" />
+                </div>
+                <div className="text-left">
+                  <div className="font-medium">הגדרות מערכת</div>
+                  <div className="text-xs text-gray-400">הגדרות כלליות</div>
+                </div>
+              </Button>
             </div>
 
             {/* Footer */}

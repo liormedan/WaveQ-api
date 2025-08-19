@@ -13,14 +13,23 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [statusMessage, setStatusMessage] = useState('')
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
+    // Load saved theme preference
+    const savedTheme = localStorage.getItem('WAVEQ_THEME')
+    if (savedTheme === 'dark' || savedTheme === 'light') {
+      setTheme(savedTheme)
+    }
+    
     // Load saved API key from localStorage
     const savedApiKey = localStorage.getItem('GEMINI_API_KEY')
     if (savedApiKey) {
       setApiKey(savedApiKey)
     }
   }, [])
+
+
 
   const handleSaveApiKey = async () => {
     if (!apiKey.trim()) {
@@ -105,14 +114,22 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100">
+    <main className={`min-h-screen transition-colors duration-300 ${
+      theme === 'dark' 
+        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white' 
+        : 'bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100 text-gray-900'
+    }`}>
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+          <h1 className={`text-4xl font-bold mb-2 ${
+            theme === 'dark' ? 'text-white' : 'text-gray-900'
+          }`}>
             ⚙️ הגדרות
           </h1>
-          <p className="text-lg text-gray-600">
+          <p className={`text-lg ${
+            theme === 'dark' ? 'text-gray-300' : 'text-gray-600'
+          }`}>
             הגדר את המערכת לשימוש עם Gemini AI
           </p>
         </div>
@@ -120,13 +137,19 @@ export default function SettingsPage() {
         {/* Navigation */}
         <div className="flex justify-center mb-8">
           <Link href="/">
-            <Button variant="outline" className="flex items-center gap-3 px-8 py-4 border-2 hover:border-purple-500 transition-all duration-200">
+            <Button variant="outline" className={`flex items-center gap-3 px-8 py-4 border-2 hover:border-purple-500 transition-all duration-200 ${
+              theme === 'dark' 
+                ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
+                : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
+            }`}>
               <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
                 <Bot className="w-6 h-6 text-purple-600" />
               </div>
               <div className="text-right">
                 <div className="font-medium">חזרה לצ'אט</div>
-                <div className="text-xs text-gray-500">דף הבית</div>
+                <div className={`text-xs ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>דף הבית</div>
               </div>
             </Button>
           </Link>
@@ -134,7 +157,9 @@ export default function SettingsPage() {
 
         <div className="max-w-2xl mx-auto space-y-6">
           {/* Gemini API Configuration */}
-          <Card className="shadow-xl border-0">
+          <Card className={`shadow-xl border-0 ${
+            theme === 'dark' ? 'bg-gray-800' : 'bg-white'
+          }`}>
             <CardHeader className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
               <CardTitle className="flex items-center gap-2">
                 <Key className="w-6 h-6" />
@@ -144,7 +169,9 @@ export default function SettingsPage() {
             
             <CardContent className="p-6 space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
+                <label className={`text-sm font-medium ${
+                  theme === 'dark' ? 'text-gray-300' : 'text-gray-700'
+                }`}>
                   מפתח API של Gemini
                 </label>
                 <div className="relative">
@@ -153,13 +180,21 @@ export default function SettingsPage() {
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="הכנס את מפתח ה-API שלך כאן..."
-                    className="pr-12"
+                    className={`pr-12 ${
+                      theme === 'dark' 
+                        ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                        : 'bg-white border-gray-200 text-gray-900 placeholder-gray-500'
+                    }`}
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-gray-100"
+                    className={`absolute right-0 top-0 h-full px-3 ${
+                      theme === 'dark' 
+                        ? 'hover:bg-gray-700 text-gray-300' 
+                        : 'hover:bg-gray-100 text-gray-600'
+                    }`}
                     onClick={() => setShowApiKey(!showApiKey)}
                   >
                     {showApiKey ? (
@@ -169,7 +204,9 @@ export default function SettingsPage() {
                     )}
                   </Button>
                 </div>
-                <p className="text-xs text-gray-500">
+                <p className={`text-xs ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
                   המפתח נשמר באופן מקומי בדפדפן שלך
                 </p>
               </div>

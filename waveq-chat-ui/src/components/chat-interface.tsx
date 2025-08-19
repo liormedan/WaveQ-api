@@ -6,8 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Upload, Send, Mic, FileAudio, MessageCircle, Bot, User, Settings } from 'lucide-react'
+import { Upload, Send, Mic, FileAudio, MessageCircle, Bot, User, Settings, Music, Scissors } from 'lucide-react'
 import Link from 'next/link'
+import { AudioProcessor } from './audio-processor'
+import { AudioTrimmer } from './audio-trimmer'
+import { AudioConverter } from './audio-converter'
 
 interface ChatMessage {
   id: string
@@ -26,20 +29,53 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
   
   // Initialize messages after component mounts to avoid hydration issues
   useEffect(() => {
-    setMessages([
-      {
-        id: '1',
-        text: 'שלום! אני Gemini AI, מומחה בעיבוד אודיו. איך אוכל לעזור לך היום?',
-        sender: 'assistant',
-        timestamp: new Date()
+    // Try to load saved chat history from localStorage
+    const savedMessages = localStorage.getItem('WAVEQ_CHAT_HISTORY')
+    
+    if (savedMessages) {
+      try {
+        const parsedMessages = JSON.parse(savedMessages)
+        // Convert timestamp strings back to Date objects
+        const messagesWithDates = parsedMessages.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+        setMessages(messagesWithDates)
+      } catch (error) {
+        console.error('Error loading chat history:', error)
+        // Fallback to default welcome message
+        setMessages([
+          {
+            id: '1',
+            text: 'שלום! אני Gemini AI, מומחה בעיבוד אודיו. איך אוכל לעזור לך היום?',
+            sender: 'assistant',
+            timestamp: new Date()
+          }
+        ])
       }
-    ])
+    } else {
+      // Default welcome message
+      setMessages([
+        {
+          id: '1',
+          text: 'שלום! אני Gemini AI, מומחה בעיבוד אודיו. איך אוכל לעזור לך היום?',
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+      ])
+    }
   }, [])
   const [inputText, setInputText] = useState('')
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [statusMessage, setStatusMessage] = useState('')
+  const [showAudioProcessor, setShowAudioProcessor] = useState(false)
+  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false)
+  const [showAudioConverter, setShowAudioConverter] = useState(false)
+  const [processedAudio, setProcessedAudio] = useState<Blob | null>(null)
+  const [trimmedAudio, setTrimmedAudio] = useState<Blob | null>(null)
+  const [convertedAudio, setConvertedAudio] = useState<Blob | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSendMessage = async () => {
@@ -53,7 +89,12 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
       audioFile: audioFile?.name
     }
 
-    setMessages(prev => [...prev, newMessage])
+    const updatedMessages = [...messages, newMessage]
+    setMessages(updatedMessages)
+    
+    // Save updated messages to localStorage
+    localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessages))
+    
     setInputText('')
     setAudioFile(null)
     setIsLoading(true)
@@ -70,7 +111,9 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           sender: 'assistant',
           timestamp: new Date()
         }
-        setMessages(prev => [...prev, errorResponse])
+        const updatedMessagesWithError = [...messages, errorResponse]
+        setMessages(updatedMessagesWithError)
+        localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithError))
         setIsLoading(false)
         return
       }
@@ -98,7 +141,9 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           sender: 'assistant',
           timestamp: new Date()
         }
-        setMessages(prev => [...prev, aiResponse])
+        const updatedMessagesWithAI = [...messages, aiResponse]
+        setMessages(updatedMessagesWithAI)
+        localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithAI))
                           } else {
                // Fallback response
                const fallbackResponse: ChatMessage = {
@@ -107,7 +152,9 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                  sender: 'assistant',
                  timestamp: new Date()
                }
-               setMessages(prev => [...prev, fallbackResponse])
+               const updatedMessagesWithFallback = [...messages, fallbackResponse]
+        setMessages(updatedMessagesWithFallback)
+        localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithFallback))
                
                // Show specific error if available
                if (data.error) {
@@ -123,7 +170,9 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         sender: 'assistant',
         timestamp: new Date()
       }
-      setMessages(prev => [...prev, errorResponse])
+      const updatedMessagesWithGeneralError = [...messages, errorResponse]
+      setMessages(updatedMessagesWithGeneralError)
+      localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithGeneralError))
     } finally {
       setIsLoading(false)
     }
@@ -133,7 +182,36 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     const file = event.target.files?.[0]
     if (file && file.type.startsWith('audio/')) {
       setAudioFile(file)
+      setShowAudioProcessor(true)
+      setProcessedAudio(null)
     }
+  }
+
+  const handleProcessedAudio = (processedAudio: Blob) => {
+    setProcessedAudio(processedAudio)
+    // Convert blob to file for sending
+    const processedFile = new File([processedAudio], `processed_${audioFile?.name || 'audio.wav'}`, {
+      type: 'audio/wav'
+    })
+    setAudioFile(processedFile)
+  }
+
+  const handleTrimmedAudio = (trimmedAudio: Blob) => {
+    setTrimmedAudio(trimmedAudio)
+    // Convert blob to file for sending
+    const trimmedFile = new File([trimmedAudio], `trimmed_${audioFile?.name || 'audio.wav'}`, {
+      type: 'audio/wav'
+    })
+    setAudioFile(trimmedFile)
+  }
+
+  const handleConvertedAudio = (convertedAudio: Blob) => {
+    setConvertedAudio(convertedAudio)
+    // Convert blob to file for sending
+    const convertedFile = new File([convertedAudio], `converted_${audioFile?.name || 'audio.wav'}`, {
+      type: convertedAudio.type
+    })
+    setAudioFile(convertedFile)
   }
 
   // Function to detect language and return text direction
@@ -163,7 +241,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         
                  <CardContent className="p-0">
            {/* Chat Messages */}
-           <div className={`h-[500px] overflow-y-auto p-6 pt-6 space-y-4 ${
+           <div className={`h-[calc(100vh-400px)] overflow-y-auto p-4 space-y-3 ${
              theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'
            }`}>
             {messages.map((message) => (
@@ -260,13 +338,13 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                            
 
                            {/* Message Input */}
-                 <div className={`border-t p-6 ${
+                 <div className={`border-t p-4 ${
                    theme === 'dark' 
                      ? 'bg-gray-900 border-gray-700' 
                      : 'bg-white border-gray-200'
                  }`}>
-                                       <div className="flex gap-4">
-                      <div className="flex-1 flex gap-3">
+                                       <div className="flex gap-3">
+                      <div className="flex-1 flex gap-2">
                         <Textarea
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
@@ -281,23 +359,71 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                             textAlign: inputText ? (detectLanguage(inputText) === 'rtl' ? 'right' : 'left') : 'right',
                             direction: inputText ? detectLanguage(inputText) : 'rtl'
                           }}
-                          rows={3}
+                          rows={2}
                         />
                         
-                        {/* File Upload Button */}
-                        <div className="flex flex-col gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`w-12 h-12 p-0 border-2 hover:border-purple-500 transition-all duration-200 ${
-                              theme === 'dark' 
-                                ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
-                                : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
-                            }`}
-                            title="העלאת קובץ אודיו"
-                          >
-                            <Upload className="w-5 h-5" />
-                          </Button>
+                                                    {/* File Upload Button */}
+                            <div className="flex flex-col gap-1">
+                              <Button
+                                variant="outline"
+                                onClick={() => fileInputRef.current?.click()}
+                                className={`w-12 h-12 p-0 border-2 hover:border-purple-500 transition-all duration-200 ${
+                                  theme === 'dark' 
+                                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
+                                    : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
+                                }`}
+                                title="העלאת קובץ אודיו"
+                              >
+                                <Upload className="w-5 h-5" />
+                              </Button>
+
+                              {/* Audio Processing Button */}
+                              {audioFile && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setShowAudioProcessor(!showAudioProcessor)}
+                                  className={`w-12 h-12 p-0 border-2 hover:border-green-500 transition-all duration-200 ${
+                                    theme === 'dark' 
+                                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
+                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
+                                  }`}
+                                  title="עיבוד אודיו מתקדם"
+                                >
+                                  <Music className="w-5 h-5" />
+                                </Button>
+                              )}
+
+                              {/* Audio Trimming Button */}
+                              {audioFile && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setShowAudioTrimmer(!showAudioTrimmer)}
+                                  className={`w-12 h-12 p-0 border-2 hover:border-red-500 transition-all duration-200 ${
+                                    theme === 'dark' 
+                                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
+                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
+                                  }`}
+                                  title="חיתוך אודיו"
+                                >
+                                  <Scissors className="w-5 h-5" />
+                                </Button>
+                              )}
+
+                              {/* Audio Converter Button */}
+                              {audioFile && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => setShowAudioConverter(!showAudioConverter)}
+                                  className={`w-12 h-12 p-0 border-2 hover:border-indigo-500 transition-all duration-200 ${
+                                    theme === 'dark' 
+                                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
+                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
+                                  }`}
+                                  title="המרת פורמט"
+                                >
+                                  <FileAudio className="w-5 h-5" />
+                                </Button>
+                              )}
                           
                           {/* File Input */}
                           <input
@@ -335,6 +461,39 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                  </div>
         </CardContent>
       </Card>
+
+      {/* Audio Processor */}
+      {showAudioProcessor && audioFile && (
+        <div className="mt-6">
+          <AudioProcessor
+            audioFile={audioFile}
+            theme={theme}
+            onProcessedAudio={handleProcessedAudio}
+          />
+        </div>
+      )}
+
+      {/* Audio Trimmer */}
+      {showAudioTrimmer && audioFile && (
+        <div className="mt-6">
+          <AudioTrimmer
+            audioFile={audioFile}
+            theme={theme}
+            onTrimmedAudio={handleTrimmedAudio}
+          />
+        </div>
+      )}
+
+      {/* Audio Converter */}
+      {showAudioConverter && audioFile && (
+        <div className="mt-6">
+          <AudioConverter
+            audioFile={audioFile}
+            theme={theme}
+            onConvertedAudio={handleConvertedAudio}
+          />
+        </div>
+      )}
     </div>
   )
 }
