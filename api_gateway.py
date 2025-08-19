@@ -11,6 +11,7 @@ from datetime import datetime
 import tempfile
 import shutil
 from pathlib import Path
+import sqlite3
 
 # MQTT client for communication with MCP server
 import asyncio_mqtt as aiomqtt
@@ -35,10 +36,31 @@ MCP_MQTT_BROKER = os.getenv("MCP_MQTT_BROKER", "localhost")
 MCP_MQTT_PORT = int(os.getenv("MCP_MQTT_PORT", "1883"))
 UPLOAD_DIR = "uploads"
 PROCESSED_DIR = "processed"
+DATABASE_FILE = "requests.db"
 
 # Ensure directories exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PROCESSED_DIR, exist_ok=True)
+os.chmod(UPLOAD_DIR, 0o775)
+os.chmod(PROCESSED_DIR, 0o775)
+
+# Database setup
+def init_db():
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audio_requests (
+            request_id TEXT PRIMARY KEY,
+            upload_path TEXT NOT NULL,
+            processed_path TEXT
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+init_db()
 
 # Request models
 class AudioEditRequest(BaseModel):
@@ -171,9 +193,20 @@ async def submit_audio_edit(
         file_extension = Path(audio_file.filename).suffix
         saved_filename = f"{request_id}{file_extension}"
         file_path = os.path.join(UPLOAD_DIR, saved_filename)
-        
+        processed_path = os.path.join(PROCESSED_DIR, saved_filename)
+
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(audio_file.file, buffer)
+
+        # Store file paths in database
+        conn = sqlite3.connect(DATABASE_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO audio_requests (request_id, upload_path, processed_path) VALUES (?, ?, ?)",
+            (request_id, file_path, processed_path),
+        )
+        conn.commit()
+        conn.close()
         
         # Create request payload
         payload = {
@@ -184,13 +217,15 @@ async def submit_audio_edit(
             "client_id": client_id,
             "priority": priority,
             "description": description,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "output_path": processed_path
         }
         
         # Track request
         active_requests[request_id] = {
             "status": "submitted",
             "file_path": file_path,
+            "processed_path": processed_path,
             "payload": payload,
             "submitted_at": datetime.now(),
             "client_id": client_id
@@ -290,6 +325,29 @@ async def download_processed_audio(request_id: str):
         path=latest_file,
         filename=latest_file.name,
         media_type="audio/wav"
+    )
+
+
+@app.get("/api/audio/result/{request_id}")
+async def get_processed_result(request_id: str):
+    """Retrieve processed audio file from storage"""
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT processed_path FROM audio_requests WHERE request_id=?",
+        (request_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="Request not found")
+    processed_path = row[0]
+    if not processed_path or not os.path.exists(processed_path):
+        raise HTTPException(status_code=404, detail="Processed file not found")
+    return FileResponse(
+        path=processed_path,
+        filename=os.path.basename(processed_path),
+        media_type="audio/wav",
     )
 
 @app.delete("/api/audio/requests/{request_id}")

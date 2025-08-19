@@ -49,8 +49,10 @@ logs/
 .env.production
 
 # Audio files (temporary)
-uploads/
-processed/
+uploads/*
+!uploads/.gitkeep
+processed/*
+!processed/.gitkeep
 temp/
 
 # Database
