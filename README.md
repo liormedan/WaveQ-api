@@ -367,3 +367,23 @@ WaveQ-Api-Server/
 ---
 
 **WaveQ Audio API Manager** - מערכת מתקדמת לעיבוד אודיו עם תמיכה מלאה ב-n8n ו-MCP 🎵✨
+
+## 🧪 הפעלת בדיקות
+
+להרצת כל הבדיקות השתמשו ב־pytest:
+
+```bash
+pytest
+```
+
+## 📑 דוגמאות לבקשות HTTP
+
+### שליחת בקשה לעריכת אודיו
+
+```bash
+curl -X POST http://localhost:8002/api/audio/edit \
+  -F "audio_file=@/path/to/file.wav" \
+  -F "operation=trim" \
+  -F "parameters={\"start\": 0, \"end\": 5}" \
+  -F "client_id=tester"
+```
