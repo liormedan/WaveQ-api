@@ -75,8 +75,8 @@ class AudioProcessingMCP:
                 port=self.mqtt_port,
                 identifier=self.client_id
             ) as client:
-                await client.subscribe("audio/requests/#")
-                await client.subscribe("audio/status/#")
+                # Listen for edit requests
+                await client.subscribe("audio/edit")
                 
                 self.logger.info("Connected to MQTT broker and subscribed to topics")
                 
@@ -105,7 +105,7 @@ class AudioProcessingMCP:
                         "payload": payload
                     })
                     
-                    if topic.startswith("audio/requests/"):
+                    if topic == "audio/edit":
                         await self.processing_queue.put({
                             "topic": topic,
                             "payload": payload,
