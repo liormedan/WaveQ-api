@@ -69,6 +69,7 @@ class MCPClient:
         self.client = None
         self.client_id = f"api_gateway_{uuid.uuid4().hex[:8]}"
         self.connected = False
+        self.status_task = None
     
     async def connect(self):
         """Connect to MQTT broker"""
@@ -80,6 +81,10 @@ class MCPClient:
             )
             await self.client.connect()
             self.connected = True
+            # Subscribe to all status updates
+            await self.client.subscribe("audio/status/#")
+            # Start background listener for status messages
+            self.status_task = asyncio.create_task(self.listen_status_updates())
             print(f"Connected to MQTT broker at {MCP_MQTT_BROKER}:{MCP_MQTT_PORT}")
         except Exception as e:
             print(f"Failed to connect to MQTT broker: {e}")
@@ -88,6 +93,8 @@ class MCPClient:
     async def disconnect(self):
         """Disconnect from MQTT broker"""
         if self.client and self.connected:
+            if self.status_task:
+                self.status_task.cancel()
             await self.client.disconnect()
             self.connected = False
     
@@ -97,21 +104,37 @@ class MCPClient:
             await self.connect()
         
         if self.connected:
-            topic = f"audio/requests/{request_id}"
+            # Publish to shared audio edit topic
+            topic = "audio/edit"
             await self.client.publish(topic, json.dumps(payload))
             return True
         return False
-    
+
     async def subscribe_to_status(self, request_id: str):
         """Subscribe to status updates for a specific request"""
+        # Subscription handled globally in connect()
         if not self.connected:
             await self.connect()
-        
-        if self.connected:
-            topic = f"audio/status/{request_id}"
-            await self.client.subscribe(topic)
-            return True
-        return False
+        return self.connected
+
+    async def listen_status_updates(self):
+        """Background task to listen for status updates"""
+        try:
+            async with self.client.messages() as messages:
+                async for message in messages:
+                    topic = message.topic.value
+                    if not topic.startswith("audio/status/"):
+                        continue
+                    try:
+                        payload = json.loads(message.payload.decode())
+                        request_id = payload.get("request_id")
+                        if request_id and request_id in active_requests:
+                            active_requests[request_id]["status"] = payload.get("status", "unknown")
+                            active_requests[request_id]["last_update"] = payload
+                    except Exception as e:
+                        print(f"Error processing status message: {e}")
+        except asyncio.CancelledError:
+            pass
 
 # Global MCP client
 mcp_client = MCPClient()
