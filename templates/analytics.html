@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaveQ - ניתוח נתונים</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div x-data="analyticsManager()" class="min-h-screen">
+        <!-- Sidebar -->
+        <div class="fixed inset-y-0 right-0 z-50 w-64 bg-gradient-to-b from-purple-600 to-purple-800 shadow-lg">
+            <div class="flex items-center justify-center h-16 bg-purple-700">
+                <h1 class="text-white text-xl font-bold">WaveQ Audio</h1>
+            </div>
+            <nav class="mt-8">
+                <a href="/" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-tachometer-alt ml-3"></i>
+                    <span>לוח בקרה</span>
+                </a>
+                <a href="/requests" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-headphones ml-3"></i>
+                    <span>בקשות אודיו</span>
+                </a>
+                <a href="/clients" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-users ml-3"></i>
+                    <span>לקוחות</span>
+                </a>
+                <a href="/analytics" class="flex items-center px-6 py-3 text-white bg-purple-700 transition-colors">
+                    <i class="fas fa-chart-line ml-3"></i>
+                    <span>ניתוח נתונים</span>
+                </a>
+                <a href="/settings" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-cog ml-3"></i>
+                    <span>הגדרות</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="mr-64">
+            <!-- Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200">
+                <div class="flex items-center justify-between px-6 py-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">ניתוח נתונים</h2>
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <select x-model="timeRange" @change="updateCharts()" 
+                                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            <option value="7">7 ימים אחרונים</option>
+                            <option value="30">30 ימים אחרונים</option>
+                            <option value="90">90 ימים אחרונים</option>
+                            <option value="365">שנה אחרונה</option>
+                        </select>
+                        <button @click="exportAnalytics()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                            <i class="fas fa-download ml-2"></i>
+                            ייצוא נתונים
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Analytics Content -->
+            <main class="p-6">
+                <!-- Key Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-blue-100 rounded-lg">
+                                <i class="fas fa-chart-line text-blue-600 text-xl"></i>
+                            </div>
+                            <div class="mr-4">
+                                <p class="text-sm text-gray-600">בקשות יומיות ממוצעות</p>
+                                <p class="text-2xl font-semibold text-gray-900" x-text="metrics.avg_daily_requests">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-green-100 rounded-lg">
+                                <i class="fas fa-clock text-green-600 text-xl"></i>
+                            </div>
+                            <div class="mr-4">
+                                <p class="text-sm text-gray-600">זמן עיבוד ממוצע</p>
+                                <p class="text-2xl font-semibold text-gray-900" x-text="metrics.avg_processing_time">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-purple-100 rounded-lg">
+                                <i class="fas fa-users text-purple-600 text-xl"></i>
+                            </div>
+                            <div class="mr-4">
+                                <p class="text-sm text-gray-600">לקוחות פעילים</p>
+                                <p class="text-2xl font-semibold text-gray-900" x-text="metrics.active_clients">0</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-yellow-100 rounded-lg">
+                                <i class="fas fa-percentage text-yellow-600 text-xl"></i>
+                            </div>
+                            <div class="mr-4">
+                                <p class="text-sm text-gray-600">אחוז הצלחה</p>
+                                <p class="text-2xl font-semibold text-gray-900"><span x-text="metrics.success_rate">0</span>%</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row 1 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <!-- Requests Over Time -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">בקשות לאורך זמן</h3>
+                        <canvas id="requestsOverTimeChart" width="400" height="200"></canvas>
+                    </div>
+
+                    <!-- Requests by Type -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">בקשות לפי סוג עריכה</h3>
+                        <canvas id="requestsByTypeChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Charts Row 2 -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <!-- Processing Time Distribution -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">התפלגות זמני עיבוד</h3>
+                        <canvas id="processingTimeChart" width="400" height="200"></canvas>
+                    </div>
+
+                    <!-- Client Activity -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">פעילות לקוחות</h3>
+                        <canvas id="clientActivityChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Performance Analysis -->
+                <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800">ניתוח ביצועים</h3>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="text-center">
+                                <div class="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center">
+                                    <span class="text-white text-2xl font-bold" x-text="metrics.peak_hour_requests">0</span>
+                                </div>
+                                <p class="text-sm text-gray-600">בקשות בשעת שיא</p>
+                                <p class="text-lg font-semibold text-gray-900" x-text="metrics.peak_hour">14:00</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                                    <span class="text-white text-2xl font-bold" x-text="metrics.fastest_processing">0</span>
+                                </div>
+                                <p class="text-sm text-gray-600">עיבוד מהיר ביותר (שניות)</p>
+                                <p class="text-lg font-semibold text-gray-900">תקוע</p>
+                            </div>
+                            <div class="text-center">
+                                <div class="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center">
+                                    <span class="text-white text-2xl font-bold" x-text="metrics.total_revenue">0</span>
+                                </div>
+                                <p class="text-sm text-gray-600">הכנסות (₪)</p>
+                                <p class="text-lg font-semibold text-gray-900">החודש</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Top Clients Table -->
+                <div class="mt-8 bg-white rounded-lg shadow-sm border border-gray-200">
+                    <div class="px-6 py-4 border-b border-gray-200">
+                        <h3 class="text-lg font-semibold text-gray-800">לקוחות מובילים</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">דירוג</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">לקוח</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">סה"כ בקשות</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">בקשות החודש</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">אחוז הצלחה</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">הכנסות</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <template x-for="(client, index) in topClients" :key="client.id">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full"
+                                                  :class="{
+                                                      'bg-yellow-100 text-yellow-800': index === 0,
+                                                      'bg-gray-100 text-gray-800': index === 1,
+                                                      'bg-orange-100 text-orange-800': index === 2,
+                                                      'bg-blue-100 text-blue-800': index > 2
+                                                  }">
+                                                <span x-text="index + 1"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="client.name"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="client.total_requests"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="client.monthly_requests"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                  :class="{
+                                                      'bg-green-100 text-green-800': client.success_rate >= 95,
+                                                      'bg-yellow-100 text-yellow-800': client.success_rate >= 85 && client.success_rate < 95,
+                                                      'bg-red-100 text-red-800': client.success_rate < 85
+                                                  }">
+                                                <span x-text="client.success_rate"></span>%
+                                            </span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₪<span x-text="client.revenue"></span></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        function analyticsManager() {
+            return {
+                timeRange: 30,
+                metrics: {
+                    avg_daily_requests: 0,
+                    avg_processing_time: 0,
+                    active_clients: 0,
+                    success_rate: 0,
+                    peak_hour_requests: 0,
+                    peak_hour: '14:00',
+                    fastest_processing: 0,
+                    total_revenue: 0
+                },
+                topClients: [
+                    {
+                        id: 1,
+                        name: 'יוסי כהן',
+                        total_requests: 156,
+                        monthly_requests: 23,
+                        success_rate: 98,
+                        revenue: 1250
+                    },
+                    {
+                        id: 2,
+                        name: 'שרה לוי',
+                        total_requests: 142,
+                        monthly_requests: 19,
+                        success_rate: 96,
+                        revenue: 1100
+                    },
+                    {
+                        id: 3,
+                        name: 'דוד ישראלי',
+                        total_requests: 98,
+                        monthly_requests: 15,
+                        success_rate: 94,
+                        revenue: 850
+                    },
+                    {
+                        id: 4,
+                        name: 'מיכל רוזן',
+                        total_requests: 87,
+                        monthly_requests: 12,
+                        success_rate: 97,
+                        revenue: 720
+                    },
+                    {
+                        id: 5,
+                        name: 'אבי כהן',
+                        total_requests: 76,
+                        monthly_requests: 10,
+                        success_rate: 92,
+                        revenue: 650
+                    }
+                ],
+                charts: {},
+                
+                async init() {
+                    this.updateMetrics();
+                    this.initializeCharts();
+                    // Auto-refresh every 5 minutes
+                    setInterval(() => this.updateMetrics(), 300000);
+                },
+                
+                updateMetrics() {
+                    // Simulate real-time metrics
+                    this.metrics = {
+                        avg_daily_requests: Math.floor(Math.random() * 50) + 25,
+                        avg_processing_time: Math.floor(Math.random() * 30) + 15,
+                        active_clients: Math.floor(Math.random() * 20) + 15,
+                        success_rate: Math.floor(Math.random() * 10) + 90,
+                        peak_hour_requests: Math.floor(Math.random() * 15) + 8,
+                        peak_hour: '14:00',
+                        fastest_processing: Math.floor(Math.random() * 10) + 5,
+                        total_revenue: Math.floor(Math.random() * 5000) + 3000
+                    };
+                },
+                
+                initializeCharts() {
+                    // Requests Over Time Chart
+                    const ctx1 = document.getElementById('requestsOverTimeChart').getContext('2d');
+                    this.charts.requestsOverTime = new Chart(ctx1, {
+                        type: 'line',
+                        data: {
+                            labels: ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'],
+                            datasets: [{
+                                label: 'בקשות יומיות',
+                                data: [65, 59, 80, 81, 56, 55, 40],
+                                borderColor: '#8B5CF6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+
+                    // Requests by Type Chart
+                    const ctx2 = document.getElementById('requestsByTypeChart').getContext('2d');
+                    this.charts.requestsByType = new Chart(ctx2, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['הפחתת רעש', 'נרמול עוצמה', 'קיצוץ שתיקות', 'שיפור אודיו', 'המרת פורמט'],
+                            datasets: [{
+                                data: [35, 25, 20, 15, 5],
+                                backgroundColor: ['#8B5CF6', '#F59E0B', '#10B981', '#3B82F6', '#EF4444']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+
+                    // Processing Time Chart
+                    const ctx3 = document.getElementById('processingTimeChart').getContext('2d');
+                    this.charts.processingTime = new Chart(ctx3, {
+                        type: 'bar',
+                        data: {
+                            labels: ['0-10s', '10-20s', '20-30s', '30-40s', '40-50s', '50s+'],
+                            datasets: [{
+                                label: 'מספר בקשות',
+                                data: [12, 19, 15, 8, 5, 2],
+                                backgroundColor: '#8B5CF6'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+
+                    // Client Activity Chart
+                    const ctx4 = document.getElementById('clientActivityChart').getContext('2d');
+                    this.charts.clientActivity = new Chart(ctx4, {
+                        type: 'radar',
+                        data: {
+                            labels: ['בקשות', 'הצלחה', 'מהירות', 'נאמנות', 'הכנסות'],
+                            datasets: [{
+                                label: 'ביצועים',
+                                data: [85, 92, 78, 88, 75],
+                                borderColor: '#8B5CF6',
+                                backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                                pointBackgroundColor: '#8B5CF6'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    max: 100
+                                }
+                            }
+                        }
+                    });
+                },
+                
+                updateCharts() {
+                    // Update chart data based on time range
+                    if (this.charts.requestsOverTime) {
+                        const days = parseInt(this.timeRange);
+                        const newData = Array.from({length: days}, () => Math.floor(Math.random() * 50) + 25);
+                        const labels = Array.from({length: days}, (_, i) => `יום ${i + 1}`);
+                        
+                        this.charts.requestsOverTime.data.labels = labels;
+                        this.charts.requestsOverTime.data.datasets[0].data = newData;
+                        this.charts.requestsOverTime.update();
+                    }
+                },
+                
+                exportAnalytics() {
+                    alert('ייצוא נתונים - בפיתוח');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

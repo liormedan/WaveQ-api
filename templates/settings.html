@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WaveQ - הגדרות</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 font-sans">
+    <div x-data="settingsManager()" class="min-h-screen">
+        <!-- Sidebar -->
+        <div class="fixed inset-y-0 right-0 z-50 w-64 bg-gradient-to-b from-purple-600 to-purple-800 shadow-lg">
+            <div class="flex items-center justify-center h-16 bg-purple-700">
+                <h1 class="text-white text-xl font-bold">WaveQ Audio</h1>
+            </div>
+            <nav class="mt-8">
+                <a href="/" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-tachometer-alt ml-3"></i>
+                    <span>לוח בקרה</span>
+                </a>
+                <a href="/requests" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-headphones ml-3"></i>
+                    <span>בקשות אודיו</span>
+                </a>
+                <a href="/clients" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-users ml-3"></i>
+                    <span>לקוחות</span>
+                </a>
+                <a href="/analytics" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
+                    <i class="fas fa-chart-line ml-3"></i>
+                    <span>ניתוח נתונים</span>
+                </a>
+                <a href="/settings" class="flex items-center px-6 py-3 text-white bg-purple-700 transition-colors">
+                    <i class="fas fa-cog ml-3"></i>
+                    <span>הגדרות</span>
+                </a>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="mr-64">
+            <!-- Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200">
+                <div class="flex items-center justify-between px-6 py-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">הגדרות מערכת</h2>
+                    <div class="flex items-center space-x-4 space-x-reverse">
+                        <button @click="saveAllSettings()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                            <i class="fas fa-save ml-2"></i>
+                            שמור הכל
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Settings Content -->
+            <main class="p-6">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- General Settings -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">הגדרות כלליות</h3>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">שם המערכת</label>
+                                <input type="text" x-model="settings.general.system_name" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">תיאור המערכת</label>
+                                <textarea x-model="settings.general.system_description" rows="3"
+                                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">שפה</label>
+                                <select x-model="settings.general.language" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                    <option value="he">עברית</option>
+                                    <option value="en">English</option>
+                                    <option value="ar">العربية</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">אזור זמן</label>
+                                <select x-model="settings.general.timezone" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                    <option value="Asia/Jerusalem">ישראל (UTC+2)</option>
+                                    <option value="UTC">UTC</option>
+                                    <option value="America/New_York">ניו יורק (UTC-5)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Processing Settings -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">הגדרות עיבוד אודיו</h3>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">איכות עיבוד</label>
+                                <select x-model="settings.audio.quality" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                    <option value="low">נמוכה (מהיר יותר)</option>
+                                    <option value="medium">בינונית</option>
+                                    <option value="high">גבוהה (איטי יותר)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">פורמט פלט ברירת מחדל</label>
+                                <select x-model="settings.audio.default_output_format" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                    <option value="wav">WAV</option>
+                                    <option value="mp3">MP3</option>
+                                    <option value="flac">FLAC</option>
+                                    <option value="aac">AAC</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">עוצמה מקסימלית (dB)</label>
+                                <input type="number" x-model="settings.audio.max_volume" min="-60" max="0" step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">זמן עיבוד מקסימלי (שניות)</label>
+                                <input type="number" x-model="settings.audio.max_processing_time" min="30" max="3600" step="30"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Settings -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">הגדרות API</h3>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">מפתח API</label>
+                                <div class="flex space-x-2 space-x-reverse">
+                                    <input type="text" x-model="settings.api.api_key" readonly
+                                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                                    <button @click="generateApiKey()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">מגבלת בקשות לדקה</label>
+                                <input type="number" x-model="settings.api.rate_limit" min="10" max="1000" step="10"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">גודל קובץ מקסימלי (MB)</label>
+                                <input type="number" x-model="settings.api.max_file_size" min="1" max="1000" step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="settings.api.enable_webhooks" 
+                                       class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                <label class="mr-2 block text-sm text-gray-700">אפשר webhooks</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Notification Settings -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">הגדרות התראות</h3>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="settings.notifications.email_notifications" 
+                                       class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                <label class="mr-2 block text-sm text-gray-700">התראות אימייל</label>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">אימייל מנהל</label>
+                                <input type="email" x-model="settings.notifications.admin_email" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="settings.notifications.sms_notifications" 
+                                       class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                <label class="mr-2 block text-sm text-gray-700">התראות SMS</label>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">מספר טלפון מנהל</label>
+                                <input type="tel" x-model="settings.notifications.admin_phone" 
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Security Settings -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">הגדרות אבטחה</h3>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">זמן פקיעת תוקף סיסמה (ימים)</label>
+                                <input type="number" x-model="settings.security.password_expiry_days" min="30" max="365" step="30"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">מספר ניסיונות כניסה מקסימלי</label>
+                                <input type="number" x-model="settings.security.max_login_attempts" min="3" max="10" step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="settings.security.two_factor_auth" 
+                                       class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                <label class="mr-2 block text-sm text-gray-700">אימות דו-שלבי</label>
+                            </div>
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="settings.security.ssl_required" 
+                                       class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                <label class="mr-2 block text-sm text-gray-700">דרוש SSL</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Backup Settings -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div class="px-6 py-4 border-b border-gray-200">
+                            <h3 class="text-lg font-semibold text-gray-800">הגדרות גיבוי</h3>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div class="flex items-center">
+                                <input type="checkbox" x-model="settings.backup.auto_backup" 
+                                       class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded">
+                                <label class="mr-2 block text-sm text-gray-700">גיבוי אוטומטי</label>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">תדירות גיבוי</label>
+                                <select x-model="settings.backup.backup_frequency" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                                    <option value="daily">יומי</option>
+                                    <option value="weekly">שבועי</option>
+                                    <option value="monthly">חודשי</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">שמירת גיבויים (ימים)</label>
+                                <input type="number" x-model="settings.backup.backup_retention_days" min="7" max="365" step="7"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                            </div>
+                            <button @click="createBackup()" class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                <i class="fas fa-download ml-2"></i>
+                                צור גיבוי עכשיו
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        function settingsManager() {
+            return {
+                settings: {
+                    general: {
+                        system_name: 'WaveQ Audio API Manager',
+                        system_description: 'מערכת ניהול מתקדמת לבקשות עריכת אודיו',
+                        language: 'he',
+                        timezone: 'Asia/Jerusalem'
+                    },
+                    audio: {
+                        quality: 'medium',
+                        default_output_format: 'wav',
+                        max_volume: -3,
+                        max_processing_time: 300
+                    },
+                    api: {
+                        api_key: 'wq_api_123456789abcdef',
+                        rate_limit: 100,
+                        max_file_size: 100,
+                        enable_webhooks: true
+                    },
+                    notifications: {
+                        email_notifications: true,
+                        admin_email: 'admin@waveq.com',
+                        sms_notifications: false,
+                        admin_phone: '050-1234567'
+                    },
+                    security: {
+                        password_expiry_days: 90,
+                        max_login_attempts: 5,
+                        two_factor_auth: true,
+                        ssl_required: true
+                    },
+                    backup: {
+                        auto_backup: true,
+                        backup_frequency: 'daily',
+                        backup_retention_days: 30
+                    }
+                },
+                
+                async init() {
+                    // Load settings from localStorage or API
+                    const savedSettings = localStorage.getItem('waveq_settings');
+                    if (savedSettings) {
+                        this.settings = { ...this.settings, ...JSON.parse(savedSettings) };
+                    }
+                },
+                
+                generateApiKey() {
+                    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                    let result = 'wq_api_';
+                    for (let i = 0; i < 32; i++) {
+                        result += chars.charAt(Math.floor(Math.random() * chars.length));
+                    }
+                    this.settings.api.api_key = result;
+                },
+                
+                async saveAllSettings() {
+                    try {
+                        // Save to localStorage
+                        localStorage.setItem('waveq_settings', JSON.stringify(this.settings));
+                        
+                        // In real app, save to API
+                        // await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(this.settings) });
+                        
+                        alert('ההגדרות נשמרו בהצלחה!');
+                    } catch (error) {
+                        console.error('Error saving settings:', error);
+                        alert('שגיאה בשמירת ההגדרות');
+                    }
+                },
+                
+                async createBackup() {
+                    try {
+                        // Simulate backup creation
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        alert('הגיבוי נוצר בהצלחה!');
+                    } catch (error) {
+                        console.error('Error creating backup:', error);
+                        alert('שגיאה ביצירת הגיבוי');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
