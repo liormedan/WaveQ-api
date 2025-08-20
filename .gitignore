@@ -63,6 +63,7 @@ temp/
 
 # Node modules (if any frontend dependencies)
 node_modules/
+.next/
 
 # Coverage reports
 htmlcov/

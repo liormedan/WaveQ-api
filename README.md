@@ -10,11 +10,13 @@ WaveQ Audio API Manager היא מערכת מקיפה המאפשרת:
 - **MCP Server** - שרת עיבוד אודיו אסינכרוני
 - **API Gateway** - ממשק REST מלא
 - **Web Dashboard** - ממשק ניהול מתקדם
+- **Chat UI** - ממשק צ'אט מבוסס Next.js
 
 ## 🏗️ ארכיטקטורת המערכת
 
 ```
-n8n Workflow → API Gateway → MQTT → MCP Server → Audio Processing
+Chat UI → API Gateway → MQTT → MCP Server → Audio Processing
+n8n Workflow →
                 ↓
             Web Dashboard
 ```
@@ -40,6 +42,9 @@ n8n Workflow → API Gateway → MQTT → MCP Server → Audio Processing
    - ממשק ניהול מתקדם
    - מעקב אחר בקשות ועיבוד
    - אנליטיקה וסטטיסטיקות
+
+5. **Chat UI** (`waveq-chat-ui/`)
+   - ממשק Next.js לתקשורת עם המערכת
 
 ## 🎵 פעולות עריכת אודיו נתמכות
 
@@ -105,6 +110,11 @@ python api_gateway.py
 
 # הפעלת Web Dashboard
 python main.py
+
+# הפעלת Chat UI (Next.js)
+cd waveq-chat-ui
+npm install
+npm run dev
 ```
 
 ## 📡 שימוש עם n8n
@@ -337,6 +347,7 @@ WaveQ-Api-Server/
 ├── config.env.example      # Environment configuration
 ├── mqtt-config/            # MQTT broker configuration
 │   └── mosquitto.conf
+├── waveq-chat-ui/          # Next.js Chat UI
 ├── templates/              # HTML templates
 │   ├── dashboard.html
 │   ├── requests.html
