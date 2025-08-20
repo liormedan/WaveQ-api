@@ -22,9 +22,9 @@ from pythonjsonlogger import jsonlogger
 class AudioProcessingMCP:
     """MCP Server for Audio Processing Operations"""
     
-    def __init__(self, mqtt_broker: str = os.getenv("MCP_MQTT_BROKER", "localhost"), mqtt_port: int = int(os.getenv("MCP_MQTT_PORT", "1883")):
-        self.mqtt_broker = mqtt_broker
-        self.mqtt_port = mqtt_port
+    def __init__(self, mqtt_broker: str = None, mqtt_port: int = None):
+        self.mqtt_broker = mqtt_broker or os.getenv("MCP_MQTT_BROKER", "localhost")
+        self.mqtt_port = mqtt_port or int(os.getenv("MCP_MQTT_PORT", "1883"))
         self.client_id = f"audio_mcp_{uuid.uuid4().hex[:8]}"
         self.processing_queue = asyncio.Queue()
         self.results_cache = {}
