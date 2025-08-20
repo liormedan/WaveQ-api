@@ -1,7 +1,6 @@
 import pytest
 from llm import parse_request
 
-
 def test_parse_request_valid():
     req = '{"operation": "trim", "parameters": {"start": 0, "end": 5}}'
     result = parse_request(req)

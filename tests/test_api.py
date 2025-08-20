@@ -1,8 +1,12 @@
 import io
-from unittest.mock import AsyncMock
-
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock
+import sys
+import types
+
+# Provide a minimal stub for asyncio_mqtt to avoid missing dependency
+sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
 
 import api_gateway
 
@@ -21,9 +25,12 @@ def client(tmp_path, monkeypatch):
 
 
 def test_audio_edit_success(client):
-    files = {"audio_file": ("test.wav", io.BytesIO(b"fake-audio"), "audio/wav")}
-    data = {"operation": "trim", "parameters": "{}", "client_id": "tester"}
-    response = client.post("/api/audio/edit", files=files, data=data)
+    payload = {
+        "file_path": "test.wav",
+        "operations": [{"operation": "trim", "parameters": {}}],
+        "client_id": "tester",
+    }
+    response = client.post("/api/audio/edit", json=payload)
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "submitted"
@@ -31,17 +38,19 @@ def test_audio_edit_success(client):
 
 
 def test_audio_edit_invalid_operation(client):
-    files = {"audio_file": ("test.wav", io.BytesIO(b"fake-audio"), "audio/wav")}
-    data = {"operation": "invalid", "parameters": "{}"}
-    response = client.post("/api/audio/edit", files=files, data=data)
-    assert response.status_code == 400
+    payload = {
+        "file_path": "test.wav",
+        "operations": "not-a-list",
+    }
+    response = client.post("/api/audio/edit", json=payload)
+    assert response.status_code == 422
 
 
 def test_audio_edit_bad_json(client):
-    files = {"audio_file": ("test.wav", io.BytesIO(b"fake-audio"), "audio/wav")}
-    data = {"operation": "trim", "parameters": "{bad json}"}
-    response = client.post("/api/audio/edit", files=files, data=data)
-    assert response.status_code == 400
+    response = client.post(
+        "/api/audio/edit", data="{bad json}", headers={"content-type": "application/json"}
+    )
+    assert response.status_code == 422
 
 
 def test_llm_chat_success(client, monkeypatch):
