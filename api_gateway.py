@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+
+from fastapi import FastAPI, HTTPException, Depends, Header, status
+
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,21 +12,41 @@ import uuid
 from datetime import datetime
 import shutil
 from pathlib import Path
-from llm_service import parse_request as llm_parse_request
+
+from dotenv import load_dotenv
+
 try:
     import redis.asyncio as redis
 except ImportError:  # pragma: no cover - redis is optional
     redis = None
 
-try:  # pragma: no cover - aiomqtt is optional
-    import asyncio_mqtt as aiomqtt
-except ImportError:  # pragma: no cover - aiomqtt is optional
-    aiomqtt = None
+
+# Load environment variables
+load_dotenv("config.env", override=True)
+
+# Security configuration
+API_KEY_REQUIRED = os.getenv("API_KEY_REQUIRED", "false").lower() == "true"
+API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
+API_KEY = os.getenv("API_KEY", "")
+
+
+async def verify_api_key(api_key: str = Header(None, alias=API_KEY_HEADER)):
+    if not API_KEY_REQUIRED:
+        return
+    if not api_key or api_key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
+
+
+
 
 app = FastAPI(
     title="WaveQ Audio API Gateway",
     description="API Gateway for Audio Processing MCP Server",
-    version="1.0.0"
+    version="1.0.0",
+    dependencies=[Depends(verify_api_key)],
 )
 
 # CORS middleware
