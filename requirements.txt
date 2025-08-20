@@ -17,6 +17,7 @@ paho-mqtt>=1.6.1
 # HTTP client for testing
 aiohttp>=3.9.0
 requests>=2.31.0
+httpx>=0.25.0
 
 # Logging and utilities
 python-json-logger>=2.0.7
@@ -24,6 +25,7 @@ python-dotenv>=1.0.0
 
 # Optional: Database support
 # psycopg2-binary>=2.9.0
+SQLAlchemy>=2.0.0
 redis>=5.0.0
 
 # Optional: Monitoring and health checks
