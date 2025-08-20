@@ -10,7 +10,9 @@ import uuid
 from datetime import datetime
 import shutil
 from pathlib import Path
+
 from dotenv import load_dotenv
+
 try:
     import redis.asyncio as redis
 except ImportError:  # pragma: no cover - redis is optional
@@ -107,8 +109,31 @@ class ChatRequest(BaseModel):
 
 
 async def parse_request(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Placeholder parser for LLM chat requests"""
-    return {"parsed": True, "input": payload}
+    """Parse chat request payload using the LLM service.
+
+    Extracts the latest message content and forwards it to the LLM parser.
+    Returns the parsed command dictionary on success.
+    Raises HTTPException on errors or malformed responses.
+    """
+
+    messages = payload.get("messages", [])
+    if not messages:
+        raise HTTPException(status_code=400, detail="No messages provided")
+
+    text = messages[-1].get("content")
+    if not text:
+        raise HTTPException(status_code=400, detail="No message content")
+
+    try:
+        result = await asyncio.to_thread(llm_parse_request, text)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"LLM service unavailable: {exc}") from exc
+
+    if not isinstance(result, dict) or not result.get("success") or "data" not in result:
+        error_msg = result.get("error") if isinstance(result, dict) else "Unknown error"
+        raise HTTPException(status_code=502, detail=f"Invalid response from LLM: {error_msg}")
+
+    return result["data"]
 
 # MQTT Client for MCP communication
 class MCPClient:
