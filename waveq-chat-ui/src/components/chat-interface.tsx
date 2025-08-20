@@ -6,11 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Upload, Send, Mic, FileAudio, MessageCircle, Bot, User, Settings, Music, Scissors } from 'lucide-react'
+import { Upload, Send, FileAudio, MessageCircle, Bot, User } from 'lucide-react'
 import Link from 'next/link'
-import { AudioProcessor } from './audio-processor'
-import { AudioTrimmer } from './audio-trimmer'
-import { AudioConverter } from './audio-converter'
 
 interface ChatMessage {
   id: string
@@ -18,6 +15,7 @@ interface ChatMessage {
   sender: 'user' | 'assistant'
   timestamp: Date
   audioFile?: string
+  downloadUrl?: string
 }
 
 interface ChatInterfaceProps {
@@ -47,7 +45,19 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         setMessages([
           {
             id: '1',
-            text: 'שלום! אני Gemini AI, מומחה בעיבוד אודיו. איך אוכל לעזור לך היום?',
+            text: `שלום! אני Gemini AI, מומחה בעיבוד אודיו. 
+
+🎵 **איך להשתמש במערכת:**
+1. **העלה קובץ אודיו** - לחץ על כפתור ההעלאה 📎
+2. **כתוב הוראות עיבוד** - תאר מה אתה רוצה לעשות לקובץ
+   - "הגבר את העוצמה ב-50%"
+   - "חתוך את ה-10 שניות הראשונות" 
+   - "הוסף באס חזק"
+   - "הפוך את הקול"
+   - "הפחת רעש"
+3. **שלח** - המערכת תעבד את הקובץ ותחזיר לך גרסה מעובדת 
+
+איך אוכל לעזור לך היום? 🎧`,
             sender: 'assistant',
             timestamp: new Date()
           }
@@ -58,7 +68,19 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
       setMessages([
         {
           id: '1',
-          text: 'שלום! אני Gemini AI, מומחה בעיבוד אודיו. איך אוכל לעזור לך היום?',
+          text: `שלום! אני Gemini AI, מומחה בעיבוד אודיו. 
+
+🎵 **איך להשתמש במערכת:**
+1. **העלה קובץ אודיו** - לחץ על כפתור ההעלאה 📎
+2. **כתוב הוראות עיבוד** - תאר מה אתה רוצה לעשות לקובץ
+   - "הגבר את העוצמה ב-50%"
+   - "חתוך את ה-10 שניות הראשונות" 
+   - "הוסף באס חזק"
+   - "הפוך את הקול"
+   - "הפחת רעש"
+3. **שלח** - המערכת תעבד את הקובץ ותחזיר לך גרסה מעובדת 
+
+איך אוכל לעזור לך היום? 🎧`,
           sender: 'assistant',
           timestamp: new Date()
         }
@@ -70,20 +92,20 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [statusMessage, setStatusMessage] = useState('')
-  const [showAudioProcessor, setShowAudioProcessor] = useState(false)
-  const [showAudioTrimmer, setShowAudioTrimmer] = useState(false)
-  const [showAudioConverter, setShowAudioConverter] = useState(false)
-  const [processedAudio, setProcessedAudio] = useState<Blob | null>(null)
-  const [trimmedAudio, setTrimmedAudio] = useState<Blob | null>(null)
-  const [convertedAudio, setConvertedAudio] = useState<Blob | null>(null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSendMessage = async () => {
     if (!inputText.trim() && !audioFile) return
 
+    // Check if this is an audio processing request
+    const isAudioProcessing = audioFile && inputText.trim()
+    
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
-      text: inputText || `העלאת קובץ אודיו: ${audioFile?.name}`,
+      text: isAudioProcessing 
+        ? `עיבוד אודיו: ${audioFile.name} - ${inputText}`
+        : inputText || `העלאת קובץ אודיו: ${audioFile?.name}`,
       sender: 'user',
       timestamp: new Date(),
       audioFile: audioFile?.name
@@ -95,6 +117,8 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     // Save updated messages to localStorage
     localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessages))
     
+    const currentInput = inputText
+    const currentAudioFile = audioFile
     setInputText('')
     setAudioFile(null)
     setIsLoading(true)
@@ -118,19 +142,73 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         return
       }
 
-      // Call Gemini API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-gemini-api-key': apiKey
-        },
-        body: JSON.stringify({
-          message: inputText || `העלאת קובץ אודיו: ${audioFile?.name}`,
-          audioFile: audioFile?.name,
-          chatHistory: messages
+      if (isAudioProcessing) {
+        // Call Audio Processing API
+        const formData = new FormData()
+        formData.append('audio', currentAudioFile!)
+        formData.append('instructions', currentInput)
+
+        const response = await fetch('/api/audio-processing', {
+          method: 'POST',
+          headers: {
+            'x-gemini-api-key': apiKey
+          },
+          body: formData
         })
-      })
+
+        if (response.ok) {
+          const processedAudioBlob = await response.blob()
+          const processedFileName = `processed_${currentAudioFile!.name}`
+          
+          // Get processing info from headers
+          const processingInfo = response.headers.get('X-Processing-Info')
+          let explanation = 'הקובץ עובד בהצלחה'
+          if (processingInfo) {
+            const info = JSON.parse(processingInfo)
+            explanation = info.explanation || explanation
+          }
+
+          // Create download link for processed audio
+          const downloadUrl = URL.createObjectURL(processedAudioBlob)
+          
+          const aiResponse: ChatMessage = {
+            id: (Date.now() + 2).toString(),
+            text: `✅ ${explanation}`,
+            sender: 'assistant',
+            timestamp: new Date(),
+            audioFile: processedFileName,
+            downloadUrl: downloadUrl
+          }
+          
+          const updatedMessagesWithAI = [...updatedMessages, aiResponse]
+          setMessages(updatedMessagesWithAI)
+          localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithAI))
+        } else {
+          const errorData = await response.json()
+          const errorResponse: ChatMessage = {
+            id: (Date.now() + 2).toString(),
+            text: `❌ שגיאה בעיבוד האודיו: ${errorData.error || 'שגיאה לא ידועה'}`,
+            sender: 'assistant',
+            timestamp: new Date()
+          }
+          const updatedMessagesWithError = [...updatedMessages, errorResponse]
+          setMessages(updatedMessagesWithError)
+          localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithError))
+        }
+      } else {
+        // Call regular Gemini Chat API
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-gemini-api-key': apiKey
+          },
+          body: JSON.stringify({
+            message: currentInput || `העלאת קובץ אודיו: ${currentAudioFile?.name}`,
+            audioFile: currentAudioFile?.name,
+            chatHistory: messages
+          })
+        })
 
       const data = await response.json()
 
@@ -141,27 +219,28 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           sender: 'assistant',
           timestamp: new Date()
         }
-        const updatedMessagesWithAI = [...messages, aiResponse]
+        const updatedMessagesWithAI = [...updatedMessages, aiResponse]
         setMessages(updatedMessagesWithAI)
         localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithAI))
-                          } else {
-               // Fallback response
-               const fallbackResponse: ChatMessage = {
-                 id: (Date.now() + 1).toString(),
-                 text: data.fallback || 'אני מצטער, יש בעיה בתקשורת עם Gemini AI. אנא בדוק את מפתח ה-API בדף ההגדרות.',
-                 sender: 'assistant',
-                 timestamp: new Date()
-               }
-               const updatedMessagesWithFallback = [...messages, fallbackResponse]
+      } else {
+        // Fallback response
+        const fallbackResponse: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: data.fallback || 'אני מצטער, יש בעיה בתקשורת עם Gemini AI. אנא בדוק את מפתח ה-API בדף ההגדרות.',
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+        const updatedMessagesWithFallback = [...updatedMessages, fallbackResponse]
         setMessages(updatedMessagesWithFallback)
         localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithFallback))
-               
-               // Show specific error if available
-               if (data.error) {
-                 console.error('Chat API Error:', data.error)
-               }
-             }
-    } catch (error) {
+        
+        // Show specific error if available
+        if (data.error) {
+          console.error('Chat API Error:', data.error)
+        }
+      }
+    }
+  } catch (error) {
       console.error('Chat API Error:', error)
       // Error fallback
       const errorResponse: ChatMessage = {
@@ -182,36 +261,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     const file = event.target.files?.[0]
     if (file && file.type.startsWith('audio/')) {
       setAudioFile(file)
-      setShowAudioProcessor(true)
-      setProcessedAudio(null)
     }
-  }
-
-  const handleProcessedAudio = (processedAudio: Blob) => {
-    setProcessedAudio(processedAudio)
-    // Convert blob to file for sending
-    const processedFile = new File([processedAudio], `processed_${audioFile?.name || 'audio.wav'}`, {
-      type: 'audio/wav'
-    })
-    setAudioFile(processedFile)
-  }
-
-  const handleTrimmedAudio = (trimmedAudio: Blob) => {
-    setTrimmedAudio(trimmedAudio)
-    // Convert blob to file for sending
-    const trimmedFile = new File([trimmedAudio], `trimmed_${audioFile?.name || 'audio.wav'}`, {
-      type: 'audio/wav'
-    })
-    setAudioFile(trimmedFile)
-  }
-
-  const handleConvertedAudio = (convertedAudio: Blob) => {
-    setConvertedAudio(convertedAudio)
-    // Convert blob to file for sending
-    const convertedFile = new File([convertedAudio], `converted_${audioFile?.name || 'audio.wav'}`, {
-      type: convertedAudio.type
-    })
-    setAudioFile(convertedFile)
   }
 
   // Function to detect language and return text direction
@@ -288,6 +338,22 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                      >
                        {message.text}
                      </p>
+                     {message.downloadUrl && (
+                       <div className="mt-3">
+                         <a
+                           href={message.downloadUrl}
+                           download={message.audioFile}
+                           className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                             theme === 'dark'
+                               ? 'bg-green-600 hover:bg-green-700 text-white'
+                               : 'bg-green-500 hover:bg-green-600 text-white'
+                           }`}
+                         >
+                           <FileAudio className="w-4 h-4" />
+                           הורד קובץ מעובד
+                         </a>
+                       </div>
+                     )}
                    </div>
                    <p className={`text-xs mt-2 ${
                      detectLanguage(message.text) === 'rtl' ? 'text-right' : 'text-left'
@@ -349,7 +415,10 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                           value={inputText}
                           onChange={(e) => setInputText(e.target.value)}
                           onKeyPress={handleKeyPress}
-                          placeholder="שאל שאלה על עיבוד אודיו או שלח קובץ לניתוח..."
+                          placeholder={audioFile 
+                            ? "כתוב הוראות עיבוד (לדוגמה: 'הגבר את העוצמה', 'חתוך את ה-10 שניות הראשונות', 'הוסף באס')..."
+                            : "שאל שאלה על עיבוד אודיו או העלה קובץ לעיבוד..."
+                          }
                           className={`flex-1 resize-none rounded-xl border-2 focus:border-purple-500 transition-colors ${
                             theme === 'dark' 
                               ? 'bg-gray-800 border-gray-600 text-white placeholder-gray-400' 
@@ -377,53 +446,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                                 <Upload className="w-5 h-5" />
                               </Button>
 
-                              {/* Audio Processing Button */}
-                              {audioFile && (
-                                <Button
-                                  variant="outline"
-                                  onClick={() => setShowAudioProcessor(!showAudioProcessor)}
-                                  className={`w-12 h-12 p-0 border-2 hover:border-green-500 transition-all duration-200 ${
-                                    theme === 'dark' 
-                                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
-                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
-                                  }`}
-                                  title="עיבוד אודיו מתקדם"
-                                >
-                                  <Music className="w-5 h-5" />
-                                </Button>
-                              )}
 
-                              {/* Audio Trimming Button */}
-                              {audioFile && (
-                                <Button
-                                  variant="outline"
-                                  onClick={() => setShowAudioTrimmer(!showAudioTrimmer)}
-                                  className={`w-12 h-12 p-0 border-2 hover:border-red-500 transition-all duration-200 ${
-                                    theme === 'dark' 
-                                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
-                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
-                                  }`}
-                                  title="חיתוך אודיו"
-                                >
-                                  <Scissors className="w-5 h-5" />
-                                </Button>
-                              )}
-
-                              {/* Audio Converter Button */}
-                              {audioFile && (
-                                <Button
-                                  variant="outline"
-                                  onClick={() => setShowAudioConverter(!showAudioConverter)}
-                                  className={`w-12 h-12 p-0 border-2 hover:border-indigo-500 transition-all duration-200 ${
-                                    theme === 'dark' 
-                                      ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-white' 
-                                      : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-900'
-                                  }`}
-                                  title="המרת פורמט"
-                                >
-                                  <FileAudio className="w-5 h-5" />
-                                </Button>
-                              )}
                           
                           {/* File Input */}
                           <input
@@ -462,38 +485,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         </CardContent>
       </Card>
 
-      {/* Audio Processor */}
-      {showAudioProcessor && audioFile && (
-        <div className="mt-6">
-          <AudioProcessor
-            audioFile={audioFile}
-            theme={theme}
-            onProcessedAudio={handleProcessedAudio}
-          />
-        </div>
-      )}
 
-      {/* Audio Trimmer */}
-      {showAudioTrimmer && audioFile && (
-        <div className="mt-6">
-          <AudioTrimmer
-            audioFile={audioFile}
-            theme={theme}
-            onTrimmedAudio={handleTrimmedAudio}
-          />
-        </div>
-      )}
-
-      {/* Audio Converter */}
-      {showAudioConverter && audioFile && (
-        <div className="mt-6">
-          <AudioConverter
-            audioFile={audioFile}
-            theme={theme}
-            onConvertedAudio={handleConvertedAudio}
-          />
-        </div>
-      )}
     </div>
   )
 }

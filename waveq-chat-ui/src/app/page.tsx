@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { ChatInterface } from '@/components/chat-interface'
 import { Button } from '@/components/ui/button'
-import { Settings, Sun, Moon, Key, Bot, Music, Scissors, FileAudio } from 'lucide-react'
+import { Settings, Sun, Moon, Key, Bot } from 'lucide-react'
 
 export default function Home() {
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
@@ -274,59 +274,7 @@ export default function Home() {
               </Button>
             </div>
 
-            {/* Audio Processing Tools */}
-            <div className="space-y-3">
-              <Button 
-                variant="outline" 
-                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-blue-500 transition-all duration-200 ${
-                  theme === 'dark' 
-                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                  <Music className="w-5 h-5 text-blue-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-medium">כלי עיבוד אודיו</div>
-                  <div className="text-xs text-gray-400">עריכה והשפעות מתקדמות</div>
-                </div>
-              </Button>
 
-              <Button 
-                variant="outline" 
-                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-red-500 transition-all duration-200 ${
-                  theme === 'dark' 
-                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div className="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
-                  <Scissors className="w-5 h-5 text-red-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-medium">חיתוך אודיו</div>
-                  <div className="text-xs text-gray-400">בחירת קטעים וזמנים</div>
-                </div>
-              </Button>
-
-              <Button 
-                variant="outline" 
-                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-indigo-500 transition-all duration-200 ${
-                  theme === 'dark' 
-                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
-                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div className="w-8 h-8 bg-indigo-500/20 rounded-lg flex items-center justify-center">
-                  <FileAudio className="w-5 h-5 text-indigo-500" />
-                </div>
-                <div className="text-left">
-                  <div className="font-medium">המרת פורמט</div>
-                  <div className="text-xs text-gray-400">שינוי סוג קובץ ואיכות</div>
-                </div>
-              </Button>
-            </div>
 
             {/* Theme Toggle */}
             <div className="space-y-3">
@@ -417,7 +365,7 @@ export default function Home() {
             </div>
           </div>
         </div>
-      </div>
+    </div>
     </main>
   )
 }
