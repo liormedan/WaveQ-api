@@ -352,22 +352,56 @@ class AudioProcessingMCP:
         }
     
     async def change_pitch(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Change audio pitch"""
+        """Change audio pitch with real pitch detection"""
         pitch_steps = parameters.get("pitch_steps", 0)  # semitones
-        
+
         y, sr = librosa.load(audio_path)
-        
+        if y.size == 0:
+            raise ValueError("Audio data is empty")
+
+        # Detect original pitch
+        try:
+            f0 = librosa.yin(
+                y,
+                fmin=librosa.note_to_hz("C2"),
+                fmax=librosa.note_to_hz("C7")
+            )
+            f0 = f0[~np.isnan(f0)]
+            if f0.size == 0:
+                raise ValueError("Insufficient pitch information in audio")
+            original_freq = float(np.median(f0))
+            original_pitch = librosa.midi_to_note(librosa.hz_to_midi(original_freq))
+        except Exception as e:
+            raise ValueError(f"Pitch analysis failed for original audio: {e}")
+
         # Change pitch using librosa
         y_pitch = librosa.effects.pitch_shift(y, sr=sr, n_steps=pitch_steps)
-        
+
+        # Detect new pitch
+        try:
+            f0_new = librosa.yin(
+                y_pitch,
+                fmin=librosa.note_to_hz("C2"),
+                fmax=librosa.note_to_hz("C7")
+            )
+            f0_new = f0_new[~np.isnan(f0_new)]
+            if f0_new.size == 0:
+                raise ValueError("Insufficient pitch information after processing")
+            new_freq = float(np.median(f0_new))
+            new_pitch = librosa.midi_to_note(librosa.hz_to_midi(new_freq))
+        except Exception as e:
+            raise ValueError(f"Pitch analysis failed after processing: {e}")
+
         output_path = f"{audio_path}_pitch_{pitch_steps}.wav"
         sf.write(output_path, y_pitch, sr)
-        
+
         return {
             "output_path": output_path,
             "pitch_steps": pitch_steps,
-            "original_pitch": "C4",  # This would need actual pitch detection
-            "new_pitch": f"C{4 + pitch_steps}"
+            "original_pitch": original_pitch,
+            "new_pitch": new_pitch,
+            "original_frequency": original_freq,
+            "new_frequency": new_freq
         }
     
     async def add_reverb(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
