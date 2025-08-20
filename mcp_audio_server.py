@@ -232,31 +232,87 @@ class AudioProcessingMCP:
         if not operations:
             raise ValueError("No operations provided")
 
-        audio = AudioSegment.from_file(file_path)
+        current_path = file_path
 
         for op in operations:
             name = op.get("name")
             if name == "trim":
-                start = int(op.get("start", 0) * 1000)
-                end = int(op.get("end", len(audio) / 1000) * 1000)
-                audio = audio[start:end]
+                params = {
+                    "start_time": op.get("start", 0),
+                    "end_time": op.get("end"),
+                }
+                result = await self.trim_audio(current_path, params)
+                current_path = result["output_path"]
             elif name == "fade_in":
-                duration = int(op.get("duration", 1000))
-                audio = audio.fade_in(duration)
+                params = {"fade_duration": op.get("duration", 1000)}
+                result = await self.fade_in_audio(current_path, params)
+                current_path = result["output_path"]
             elif name == "fade_out":
-                duration = int(op.get("duration", 1000))
-                audio = audio.fade_out(duration)
+                params = {"fade_duration": op.get("duration", 1000)}
+                result = await self.fade_out_audio(current_path, params)
+                current_path = result["output_path"]
             elif name == "normalize":
-                audio = audio.normalize()
+                params = {"target_db": op.get("target_db", -20)}
+                result = await self.normalize_audio(current_path, params)
+                current_path = result["output_path"]
+            elif name == "change_speed":
+                params = {"speed_factor": op.get("speed_factor", 1.0)}
+                result = await self.change_speed(current_path, params)
+                current_path = result["output_path"]
+            elif name == "change_pitch":
+                params = {"pitch_steps": op.get("pitch_steps", 0)}
+                result = await self.change_pitch(current_path, params)
+                current_path = result["output_path"]
+            elif name == "add_reverb":
+                params = {
+                    "room_size": op.get("room_size", 0.5),
+                    "damping": op.get("damping", 0.5),
+                }
+                result = await self.add_reverb(current_path, params)
+                current_path = result["output_path"]
+            elif name == "noise_reduction":
+                params = {"strength": op.get("strength", 0.1)}
+                result = await self.noise_reduction(current_path, params)
+                current_path = result["output_path"]
+            elif name == "equalize":
+                params = {
+                    "low_gain": op.get("low_gain", 1.0),
+                    "mid_gain": op.get("mid_gain", 1.0),
+                    "high_gain": op.get("high_gain", 1.0),
+                }
+                result = await self.equalize_audio(current_path, params)
+                current_path = result["output_path"]
+            elif name == "compress":
+                params = {
+                    "threshold": op.get("threshold", -20),
+                    "ratio": op.get("ratio", 4.0),
+                    "attack": op.get("attack", 0.005),
+                    "release": op.get("release", 0.1),
+                }
+                result = await self.compress_audio(current_path, params)
+                current_path = result["output_path"]
+            elif name == "merge":
+                params = {"additional_files": op.get("additional_files", [])}
+                result = await self.merge_audio_files(current_path, params)
+                current_path = result["output_path"]
+            elif name == "split":
+                params = {"segment_duration": op.get("segment_duration", 30)}
+                result = await self.split_audio(current_path, params)
+                if result.get("segment_paths"):
+                    current_path = result["segment_paths"][0]
+                else:
+                    raise ValueError("Split operation produced no segments")
+            elif name == "convert_format":
+                params = {
+                    "target_format": op.get("target_format", "mp3"),
+                    "quality": op.get("quality", "high"),
+                }
+                result = await self.convert_format(current_path, params)
+                current_path = result["output_path"]
             else:
                 raise ValueError(f"Unsupported operation: {name}")
 
-        output_dir = Path("processed")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{Path(file_path).stem}_processed.wav"
-        audio.export(output_path, format="wav")
-
-        return str(output_path)
+        return current_path
 
     async def trim_audio(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Trim audio file to specified start and end times"""
@@ -352,22 +408,56 @@ class AudioProcessingMCP:
         }
     
     async def change_pitch(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
-        """Change audio pitch"""
+        """Change audio pitch with real pitch detection"""
         pitch_steps = parameters.get("pitch_steps", 0)  # semitones
-        
+
         y, sr = librosa.load(audio_path)
-        
+        if y.size == 0:
+            raise ValueError("Audio data is empty")
+
+        # Detect original pitch
+        try:
+            f0 = librosa.yin(
+                y,
+                fmin=librosa.note_to_hz("C2"),
+                fmax=librosa.note_to_hz("C7")
+            )
+            f0 = f0[~np.isnan(f0)]
+            if f0.size == 0:
+                raise ValueError("Insufficient pitch information in audio")
+            original_freq = float(np.median(f0))
+            original_pitch = librosa.midi_to_note(librosa.hz_to_midi(original_freq))
+        except Exception as e:
+            raise ValueError(f"Pitch analysis failed for original audio: {e}")
+
         # Change pitch using librosa
         y_pitch = librosa.effects.pitch_shift(y, sr=sr, n_steps=pitch_steps)
-        
+
+        # Detect new pitch
+        try:
+            f0_new = librosa.yin(
+                y_pitch,
+                fmin=librosa.note_to_hz("C2"),
+                fmax=librosa.note_to_hz("C7")
+            )
+            f0_new = f0_new[~np.isnan(f0_new)]
+            if f0_new.size == 0:
+                raise ValueError("Insufficient pitch information after processing")
+            new_freq = float(np.median(f0_new))
+            new_pitch = librosa.midi_to_note(librosa.hz_to_midi(new_freq))
+        except Exception as e:
+            raise ValueError(f"Pitch analysis failed after processing: {e}")
+
         output_path = f"{audio_path}_pitch_{pitch_steps}.wav"
         sf.write(output_path, y_pitch, sr)
-        
+
         return {
             "output_path": output_path,
             "pitch_steps": pitch_steps,
-            "original_pitch": "C4",  # This would need actual pitch detection
-            "new_pitch": f"C{4 + pitch_steps}"
+            "original_pitch": original_pitch,
+            "new_pitch": new_pitch,
+            "original_frequency": original_freq,
+            "new_frequency": new_freq
         }
     
     async def add_reverb(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
