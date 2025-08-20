@@ -81,6 +81,7 @@ services:
     container_name: waveq-redis
     ports:
       - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
     volumes:
       - redis-data:/data
     networks:
@@ -92,9 +93,9 @@ services:
     image: postgres:15-alpine
     container_name: waveq-postgres
     environment:
-      POSTGRES_DB: waveq_audio
-      POSTGRES_USER: waveq_user
-      POSTGRES_PASSWORD: waveq_password
+      POSTGRES_DB: ${POSTGRES_DB:-waveq_audio}
+      POSTGRES_USER: ${POSTGRES_USER:-waveq_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waveq_password}
     ports:
       - "5432:5432"
     volumes:
