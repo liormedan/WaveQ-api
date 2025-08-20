@@ -41,10 +41,6 @@ async def admin_dashboard(request: Request):
 async def clients_page(request: Request):
     return templates.TemplateResponse("clients.html", {"request": request})
 
-@app.get("/requests", response_class=HTMLResponse)
-async def requests_page(request: Request):
-    return templates.TemplateResponse("requests.html", {"request": request})
-
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     return templates.TemplateResponse("settings.html", {"request": request})
