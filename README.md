@@ -207,6 +207,23 @@ python main.py
 
 ## 🔒 אבטחה
 
+### API Key
+
+המערכת תומכת באימות מבוסס API Key. להפעלה:
+
+1. ערכו את הקובץ `config.env` והגדירו:
+   ```bash
+   API_KEY_REQUIRED=true
+   API_KEY_HEADER=X-API-Key
+   API_KEY=your-secret-key
+   ```
+2. צרפו לכל בקשה את הכותרת המתאימה:
+   ```
+   X-API-Key: your-secret-key
+   ```
+
+בהיעדר מפתח או במקרה של מפתח שגוי יוחזר סטטוס `401 Unauthorized`.
+
 ### הגדרות אבטחה מומלצות:
 
 1. **MQTT Authentication**:
@@ -382,6 +399,7 @@ pytest
 
 ```bash
 curl -X POST http://localhost:8002/api/audio/edit \
+  -H "X-API-Key: your-secret-key" \
   -F "audio_file=@/path/to/file.wav" \
   -F "operation=trim" \
   -F "parameters={\"start\": 0, \"end\": 5}" \
