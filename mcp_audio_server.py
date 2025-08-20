@@ -232,31 +232,87 @@ class AudioProcessingMCP:
         if not operations:
             raise ValueError("No operations provided")
 
-        audio = AudioSegment.from_file(file_path)
+        current_path = file_path
 
         for op in operations:
             name = op.get("name")
             if name == "trim":
-                start = int(op.get("start", 0) * 1000)
-                end = int(op.get("end", len(audio) / 1000) * 1000)
-                audio = audio[start:end]
+                params = {
+                    "start_time": op.get("start", 0),
+                    "end_time": op.get("end"),
+                }
+                result = await self.trim_audio(current_path, params)
+                current_path = result["output_path"]
             elif name == "fade_in":
-                duration = int(op.get("duration", 1000))
-                audio = audio.fade_in(duration)
+                params = {"fade_duration": op.get("duration", 1000)}
+                result = await self.fade_in_audio(current_path, params)
+                current_path = result["output_path"]
             elif name == "fade_out":
-                duration = int(op.get("duration", 1000))
-                audio = audio.fade_out(duration)
+                params = {"fade_duration": op.get("duration", 1000)}
+                result = await self.fade_out_audio(current_path, params)
+                current_path = result["output_path"]
             elif name == "normalize":
-                audio = audio.normalize()
+                params = {"target_db": op.get("target_db", -20)}
+                result = await self.normalize_audio(current_path, params)
+                current_path = result["output_path"]
+            elif name == "change_speed":
+                params = {"speed_factor": op.get("speed_factor", 1.0)}
+                result = await self.change_speed(current_path, params)
+                current_path = result["output_path"]
+            elif name == "change_pitch":
+                params = {"pitch_steps": op.get("pitch_steps", 0)}
+                result = await self.change_pitch(current_path, params)
+                current_path = result["output_path"]
+            elif name == "add_reverb":
+                params = {
+                    "room_size": op.get("room_size", 0.5),
+                    "damping": op.get("damping", 0.5),
+                }
+                result = await self.add_reverb(current_path, params)
+                current_path = result["output_path"]
+            elif name == "noise_reduction":
+                params = {"strength": op.get("strength", 0.1)}
+                result = await self.noise_reduction(current_path, params)
+                current_path = result["output_path"]
+            elif name == "equalize":
+                params = {
+                    "low_gain": op.get("low_gain", 1.0),
+                    "mid_gain": op.get("mid_gain", 1.0),
+                    "high_gain": op.get("high_gain", 1.0),
+                }
+                result = await self.equalize_audio(current_path, params)
+                current_path = result["output_path"]
+            elif name == "compress":
+                params = {
+                    "threshold": op.get("threshold", -20),
+                    "ratio": op.get("ratio", 4.0),
+                    "attack": op.get("attack", 0.005),
+                    "release": op.get("release", 0.1),
+                }
+                result = await self.compress_audio(current_path, params)
+                current_path = result["output_path"]
+            elif name == "merge":
+                params = {"additional_files": op.get("additional_files", [])}
+                result = await self.merge_audio_files(current_path, params)
+                current_path = result["output_path"]
+            elif name == "split":
+                params = {"segment_duration": op.get("segment_duration", 30)}
+                result = await self.split_audio(current_path, params)
+                if result.get("segment_paths"):
+                    current_path = result["segment_paths"][0]
+                else:
+                    raise ValueError("Split operation produced no segments")
+            elif name == "convert_format":
+                params = {
+                    "target_format": op.get("target_format", "mp3"),
+                    "quality": op.get("quality", "high"),
+                }
+                result = await self.convert_format(current_path, params)
+                current_path = result["output_path"]
             else:
                 raise ValueError(f"Unsupported operation: {name}")
 
-        output_dir = Path("processed")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{Path(file_path).stem}_processed.wav"
-        audio.export(output_path, format="wav")
-
-        return str(output_path)
+        return current_path
 
     async def trim_audio(self, audio_path: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Trim audio file to specified start and end times"""
