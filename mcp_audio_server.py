@@ -430,21 +430,21 @@ class AudioProcessingMCP:
         high_gain = parameters.get("high_gain", 1.0)
         
         y, sr = librosa.load(audio_path)
-        
+
         # Apply filters for different frequency bands
         # Low frequencies (0-500 Hz)
-        low_filter = signal.butter(4, 500/(sr/2), btype='low')[0]
-        y_low = signal.filtfilt(low_filter[0], low_filter[1], y)
-        
+        b_low, a_low = signal.butter(4, 500/(sr/2), btype='low')
+        y_low = signal.filtfilt(b_low, a_low, y)
+
         # Mid frequencies (500-4000 Hz)
-        mid_filter_low = signal.butter(4, 500/(sr/2), btype='high')[0]
-        mid_filter_high = signal.butter(4, 4000/(sr/2), btype='low')[0]
-        y_mid = signal.filtfilt(mid_filter_low[0], mid_filter_low[1], y)
-        y_mid = signal.filtfilt(mid_filter_high[0], mid_filter_high[1], y_mid)
-        
+        b_mid_low, a_mid_low = signal.butter(4, 500/(sr/2), btype='high')
+        b_mid_high, a_mid_high = signal.butter(4, 4000/(sr/2), btype='low')
+        y_mid = signal.filtfilt(b_mid_low, a_mid_low, y)
+        y_mid = signal.filtfilt(b_mid_high, a_mid_high, y_mid)
+
         # High frequencies (4000+ Hz)
-        high_filter = signal.butter(4, 4000/(sr/2), btype='high')[0]
-        y_high = signal.filtfilt(high_filter[0], high_filter[1], y)
+        b_high, a_high = signal.butter(4, 4000/(sr/2), btype='high')
+        y_high = signal.filtfilt(b_high, a_high, y)
         
         # Combine with gains
         y_eq = low_gain * y_low + mid_gain * y_mid + high_gain * y_high
