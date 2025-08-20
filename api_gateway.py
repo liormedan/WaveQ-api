@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -16,8 +16,10 @@ try:
 except ImportError:  # pragma: no cover - redis is optional
     redis = None
 
-# MQTT client for communication with MCP server
-import asyncio_mqtt as aiomqtt
+try:  # pragma: no cover - aiomqtt is optional
+    import asyncio_mqtt as aiomqtt
+except ImportError:  # pragma: no cover - aiomqtt is optional
+    aiomqtt = None
 
 app = FastAPI(
     title="WaveQ Audio API Gateway",
@@ -59,6 +61,14 @@ class AudioOperation(BaseModel):
 class AudioEditRequest(BaseModel):
     file_path: str
     operations: List[AudioOperation]
+    client_id: Optional[str] = None
+    priority: Optional[str] = "normal"
+    description: Optional[str] = ""
+
+
+class AudioEditUploadRequest(BaseModel):
+    operation: str
+    parameters: Dict[str, Any]
     client_id: Optional[str] = None
     priority: Optional[str] = "normal"
     description: Optional[str] = ""
@@ -231,27 +241,58 @@ async def shutdown_event():
     await mcp_client.disconnect()
 
 @app.post("/api/audio/edit", response_model=AudioEditResponse)
-async def submit_audio_edit(request: AudioEditRequest):
-    """Submit an audio editing request via JSON body"""
+async def submit_audio_edit(
+    audio_file: UploadFile = File(...),
+    operation: str = Form(...),
+    parameters: str = Form("{}"),
+    client_id: Optional[str] = Form(None),
+    priority: Optional[str] = Form("normal"),
+    description: Optional[str] = Form(""),
+):
+    """Submit an audio editing request via multipart form data"""
     try:
+        try:
+            params_dict = json.loads(parameters)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON for parameters")
+
+        form = AudioEditUploadRequest(
+            operation=operation,
+            parameters=params_dict,
+            client_id=client_id,
+            priority=priority,
+            description=description,
+        )
+
+        supported = (await get_supported_operations())["operations"]
+        if form.operation not in supported:
+            raise HTTPException(status_code=400, detail="Unsupported operation")
+
         request_id = str(uuid.uuid4())
+
+        filename = f"{request_id}_{audio_file.filename}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(audio_file.file, buffer)
 
         payload = {
             "request_id": request_id,
-            "operations": [op.dict() for op in request.operations],
-            "audio_path": request.file_path,
-            "client_id": request.client_id,
-            "priority": request.priority,
-            "description": request.description,
+            "operations": [
+                {"operation": form.operation, "parameters": form.parameters}
+            ],
+            "audio_path": file_path,
+            "client_id": form.client_id,
+            "priority": form.priority,
+            "description": form.description,
             "timestamp": datetime.now().isoformat(),
         }
 
         request_info = {
             "status": "submitted",
-            "file_path": request.file_path,
+            "file_path": file_path,
             "payload": payload,
             "submitted_at": datetime.now().isoformat(),
-            "client_id": request.client_id,
+            "client_id": form.client_id,
         }
 
         await save_request(request_id, request_info)
@@ -269,6 +310,8 @@ async def submit_audio_edit(request: AudioEditRequest):
             timestamp=datetime.now().isoformat(),
             estimated_completion=None,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
