@@ -7,6 +7,7 @@ import soundfile as sf
 import types
 import sys
 from pathlib import Path
+import shutil
 
 # Provide a minimal stub for asyncio_mqtt to allow importing the server
 sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
@@ -36,6 +37,36 @@ ta.load = _load
 ta.save = _save
 ta.sox_effects = _SoxEffects()
 sys.modules.setdefault("torchaudio", ta)
+
+
+# Provide a minimal stub for ffmpeg-python
+ff = types.ModuleType("ffmpeg")
+
+
+class FFError(Exception):
+    pass
+
+
+def _ffmpeg_input(path):
+    return path
+
+
+def _ffmpeg_output(stream, out_path, format=None, **_):
+    return stream, out_path, format
+
+
+def _ffmpeg_run(args, overwrite_output=True):
+    src, dst, fmt = args
+    if fmt == "invalid":
+        raise FFError("Unsupported format")
+    shutil.copyfile(src, dst)
+
+
+ff.input = _ffmpeg_input
+ff.output = _ffmpeg_output
+ff.run = _ffmpeg_run
+ff.Error = FFError
+sys.modules.setdefault("ffmpeg", ff)
 
 
 # Ensure the project root is on the path when running tests directly
@@ -93,6 +124,19 @@ def test_merge_audio_files(sample_wav, tmp_path):
     assert len(result["merged_files"]) == 2
 
 
+def test_merge_no_additional_files(sample_wav):
+    server = AudioProcessingMCP()
+    result = asyncio.run(server.merge_audio_files(sample_wav, {"additional_files": []}))
+    assert os.path.exists(result["output_path"])
+    assert result["merged_files"] == [sample_wav]
+
+
+def test_merge_missing_file(sample_wav):
+    server = AudioProcessingMCP()
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(server.merge_audio_files(sample_wav, {"additional_files": ["nope.wav"]}))
+
+
 def test_split_audio(sample_wav):
     server = AudioProcessingMCP()
     result = asyncio.run(server.split_audio(sample_wav, {"segment_duration": 1}))
@@ -101,10 +145,28 @@ def test_split_audio(sample_wav):
         assert os.path.exists(path)
 
 
+def test_split_large_segment(sample_wav):
+    server = AudioProcessingMCP()
+    result = asyncio.run(server.split_audio(sample_wav, {"segment_duration": 10}))
+    assert result["total_segments"] == 1
+
+
+def test_split_invalid_duration(sample_wav):
+    server = AudioProcessingMCP()
+    with pytest.raises(ValueError):
+        asyncio.run(server.split_audio(sample_wav, {"segment_duration": 0}))
+
+
 def test_convert_format(sample_wav):
     server = AudioProcessingMCP()
     result = asyncio.run(server.convert_format(sample_wav, {"target_format": "wav"}))
     assert os.path.exists(result["output_path"])
+
+
+def test_convert_format_invalid(sample_wav):
+    server = AudioProcessingMCP()
+    with pytest.raises(mcp_audio_server.ffmpeg.Error):
+        asyncio.run(server.convert_format(sample_wav, {"target_format": "invalid"}))
 
 
 def test_process_operations(sample_wav):
