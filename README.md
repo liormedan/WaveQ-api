@@ -60,7 +60,7 @@ n8n Workflow →
 - **Noise Reduction** - הפחתת רעש
 - **Equalization** - שוויון תדרים (3-פס)
 - **Compression** - דחיסה דינמית
-- **Format Conversion** - המרת פורמטים
+- **Format Conversion** - המרת פורמטים עם שליטה ב-bitrate, sample rate ו-channels
 
 ### פעולות מורכבות:
 - **Merge** - מיזוג קבצי אודיו
