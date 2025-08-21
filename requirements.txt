@@ -14,6 +14,7 @@ scipy>=1.11.0
 
 # MQTT communication
 paho-mqtt>=1.6.1
+asyncio-mqtt>=0.16.2
 
 # HTTP client for testing
 aiohttp>=3.9.0

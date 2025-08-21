@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
+import asyncio_mqtt as aiomqtt
 
 try:
     import redis.asyncio as redis
