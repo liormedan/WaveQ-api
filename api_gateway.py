@@ -13,6 +13,7 @@ import shutil
 from pathlib import Path
 
 from dotenv import load_dotenv
+from llm_service import parse_request as llm_parse_request
 
 try:
     import redis.asyncio as redis
@@ -331,6 +332,72 @@ async def submit_audio_edit(
             timestamp=datetime.now().isoformat(),
             estimated_completion=None,
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+
+
+@app.post("/api/chat/audio")
+async def chat_audio(
+    message: str = Form(...),
+    audio_file: UploadFile = File(...),
+    client_id: Optional[str] = Form(None),
+    priority: Optional[str] = Form("normal"),
+    description: Optional[str] = Form(""),
+):
+    """Handle natural language audio processing requests with file upload"""
+    try:
+        try:
+            result = await asyncio.to_thread(llm_parse_request, message)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"LLM service unavailable: {exc}") from exc
+
+        if not isinstance(result, dict) or not result.get("success") or "data" not in result:
+            error_msg = result.get("error") if isinstance(result, dict) else "Unknown error"
+            raise HTTPException(status_code=502, detail=f"Invalid response from LLM: {error_msg}")
+
+        data = result["data"]
+        operation = data.get("operation")
+        parameters = data.get("parameters", {})
+        if not operation:
+            raise HTTPException(status_code=502, detail="Invalid response from LLM: missing operation")
+
+        request_id = str(uuid.uuid4())
+        filename = f"{request_id}_{audio_file.filename}"
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(audio_file.file, buffer)
+
+        payload = {
+            "request_id": request_id,
+            "audio_path": file_path,
+            "operations": [
+                {"operation": operation, "parameters": parameters}
+            ],
+            "client_id": client_id,
+            "priority": priority,
+            "description": description,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        request_info = {
+            "status": "submitted",
+            "file_path": file_path,
+            "payload": payload,
+            "submitted_at": datetime.now().isoformat(),
+            "client_id": client_id,
+        }
+
+        await save_request(request_id, request_info)
+
+        success = await mcp_client.publish_request(request_id, payload)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to submit to MCP server")
+
+        await mcp_client.subscribe_to_status(request_id)
+
+        return {"request_id": request_id, "status": "submitted"}
     except HTTPException:
         raise
     except Exception as e:
