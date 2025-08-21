@@ -1,4 +1,17 @@
-from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks, UploadFile, File, Depends, Response, Cookie
+from fastapi import (
+    FastAPI,
+    Request,
+    Form,
+    HTTPException,
+    BackgroundTasks,
+    UploadFile,
+    File,
+    Depends,
+    Response,
+    Cookie,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
@@ -94,6 +107,53 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Templates
 templates = Jinja2Templates(directory="templates")
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            await connection.send_json(message)
+
+
+ws_manager = ConnectionManager()
+
+
+@app.websocket("/ws/requests")
+async def websocket_requests(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+
+
+def request_to_dict(req: AudioEditRequest) -> dict:
+    return {
+        "request_id": req.request_id,
+        "client_name": req.client_name,
+        "audio_file": req.audio_file,
+        "edit_type": req.edit_type,
+        "description": req.description,
+        "priority": req.priority,
+        "status": req.status,
+        "created_at": req.created_at.isoformat(),
+        "updated_at": req.updated_at.isoformat(),
+        "processing_time": req.processing_time,
+        "result_file": req.result_file,
+        "error_message": req.error_message,
+    }
 
 # Authentication setup
 SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "change_me")
@@ -369,6 +429,8 @@ async def submit_audio_edit_request(
         db.commit()
         db.refresh(new_request)
 
+        await ws_manager.broadcast(request_to_dict(new_request))
+
         # Security: Log the request
         logger.info(f"Audio edit request submitted: {new_request.request_id} by {request_data.client_name}")
 
@@ -466,6 +528,8 @@ async def update_request_status(
             req.processing_time = (req.updated_at - req.created_at).total_seconds()
         db.commit()
 
+        await ws_manager.broadcast(request_to_dict(req))
+
         return {"success": True, "message": f"Request {request_id} status updated to {status}"}
 
     raise HTTPException(status_code=404, detail="Request not found")
@@ -559,6 +623,7 @@ async def process_audio_request(request_id: str):
             req.processing_time = (req.updated_at - req.created_at).total_seconds()
             req.result_file = f"processed_{req.audio_file}"
             db.commit()
+            await ws_manager.broadcast(request_to_dict(req))
     finally:
         db.close()
 
@@ -570,6 +635,8 @@ async def process_request(request_id: str, background_tasks: BackgroundTasks, db
         req.status = "processing"
         req.updated_at = datetime.now()
         db.commit()
+
+        await ws_manager.broadcast(request_to_dict(req))
 
         # Add background task to simulate processing
         background_tasks.add_task(process_audio_request, request_id)

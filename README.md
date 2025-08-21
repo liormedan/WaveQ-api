@@ -188,6 +188,34 @@ DELETE /api/audio/requests/{request_id}
 GET /api/audio/operations
 ```
 
+## 🔔 עדכוני סטטוס בזמן אמת
+
+המערכת מספקת עדכוני סטטוס בזמן אמת באמצעות WebSocket.
+
+### נקודת קצה
+`ws://<server-host>/ws/requests`
+
+### פורמט הודעה (JSON)
+
+```json
+{
+  "request_id": "REQ-000001",
+  "status": "processing",
+  "client_name": "client1",
+  "audio_file": "file.wav",
+  "edit_type": "noise_reduction",
+  "description": "Remove noise",
+  "priority": "normal",
+  "created_at": "2024-01-01T12:00:00",
+  "updated_at": "2024-01-01T12:00:00",
+  "processing_time": null,
+  "result_file": null,
+  "error_message": null
+}
+```
+
+הדשבורד מתחבר לנקודת קצה זו ומקבל עדכונים על בקשות חדשות ושינויים בסטטוס ללא צורך ברענון ידני של העמוד.
+
 ## 🔧 הגדרות וקונפיגורציה
 
 ### משתני סביבה:

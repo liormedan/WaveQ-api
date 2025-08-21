@@ -263,6 +263,7 @@
                 editTypeFilter: '',
                 currentPage: 1,
                 pageSize: 10,
+                socket: null,
                 newRequest: {
                     client_name: '',
                     edit_type: '',
@@ -277,6 +278,18 @@
                 
                 async init() {
                     await this.refreshData();
+                    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+                    this.socket = new WebSocket(`${protocol}://${window.location.host}/ws/requests`);
+                    this.socket.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        const index = this.requests.findIndex(r => r.request_id === data.request_id);
+                        if (index !== -1) {
+                            this.requests[index] = data;
+                        } else {
+                            this.requests.push(data);
+                        }
+                        this.applyFilters();
+                    };
                     // Auto-refresh every 30 seconds
                     setInterval(() => this.refreshData(), 30000);
                 },
