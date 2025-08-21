@@ -19,6 +19,7 @@ interface ChatMessage {
   downloadUrl?: string
   originalAudioFile?: File
   showVisualization?: boolean
+  status?: 'uploaded' | 'processed' | 'error'
 }
 
 interface ChatInterfaceProps {
@@ -302,14 +303,15 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     const isAudioProcessing = audioFile && inputText.trim()
     const isAudioFileOnly = audioFile && !inputText.trim()
     
-    const newMessage: ChatMessage = {
+  const newMessage: ChatMessage = {
       id: Date.now().toString(),
-      text: isAudioProcessing 
+      text: isAudioProcessing
         ? `עיבוד אודיו: ${audioFile.name} - ${inputText}`
         : inputText || `העלאת קובץ אודיו: ${audioFile?.name}`,
       sender: 'user',
       timestamp: new Date(),
-      audioFile: audioFile?.name
+      audioFile: audioFile?.name,
+      status: audioFile ? 'uploaded' : undefined
     }
 
     const updatedMessages = [...messages, newMessage]
@@ -454,77 +456,120 @@ ${audioAnalysis.quickActions}
           saveMessagesToStorage(updatedMessagesWithAI)
         }
       } else if (isAudioProcessing) {
-        // Call Audio Processing API
+        // Upload audio and instructions then poll for processing
         const formData = new FormData()
         formData.append('audio', currentAudioFile!)
-        formData.append('instructions', currentInput)
+        formData.append('text', currentInput)
 
-        const response = await fetch('/api/audio-processing', {
+        const uploadResponse = await fetch('/api/chat/audio', {
           method: 'POST',
-          headers: {
-            'x-gemini-api-key': apiKey
-          },
           body: formData
         })
 
-        if (response.ok) {
-          const processedAudioBlob = await response.blob()
-          const processedFileName = `processed_${currentAudioFile!.name}`
-          
-          // Get processing info from headers
-          const processingInfo = response.headers.get('X-Processing-Info')
-          let explanation = 'הקובץ עובד בהצלחה'
-          if (processingInfo) {
-            const info = JSON.parse(processingInfo)
-            explanation = info.explanation || explanation
-          }
-
-          // Create download link for processed audio
-          const downloadUrl = URL.createObjectURL(processedAudioBlob)
-          
-          // Save to exports list
-          const exportedFile = {
-            id: Date.now().toString(),
-            name: processedFileName,
-            originalName: currentAudioFile!.name,
-            processedAt: new Date(),
-            size: processedAudioBlob.size,
-            downloadUrl: downloadUrl,
-            operations: [currentInput] // Store the user instruction as operation
-          }
-          
-          // Get existing exports
-          const existingExports = localStorage.getItem('WAVEQ_EXPORTED_FILES')
-          let exports = []
-          if (existingExports) {
-            try {
-              exports = JSON.parse(existingExports)
-            } catch (error) {
-              console.error('Error parsing exported files:', error)
-            }
-          }
-          
-          // Add new export
-          exports.unshift(exportedFile) // Add to beginning of array
-          localStorage.setItem('WAVEQ_EXPORTED_FILES', JSON.stringify(exports))
-          
-          const aiResponse: ChatMessage = {
-            id: (Date.now() + 2).toString(),
-            text: `✅ ${explanation}\n\n📁 הקובץ נשמר בקובצי הייצוא ומוכן להורדה!`,
-            sender: 'assistant',
-            timestamp: new Date(),
-            audioFile: processedFileName,
-            downloadUrl: downloadUrl
-          }
-          
-          const updatedMessagesWithAI = [...updatedMessages, aiResponse]
-          setMessages(updatedMessagesWithAI)
-          saveMessagesToStorage(updatedMessagesWithAI)
-        } else {
-          const errorData = await response.json()
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json()
           const errorResponse: ChatMessage = {
             id: (Date.now() + 2).toString(),
-            text: `❌ שגיאה בעיבוד האודיו: ${errorData.error || 'שגיאה לא ידועה'}`,
+            text: `❌ שגיאה בהעלאת האודיו: ${errorData.error || 'שגיאה לא ידועה'}`,
+            sender: 'assistant',
+            timestamp: new Date()
+          }
+          const updatedMessagesWithError = [...updatedMessages, errorResponse]
+          setMessages(updatedMessagesWithError)
+          saveMessagesToStorage(updatedMessagesWithError)
+          return
+        }
+
+        const { request_id } = await uploadResponse.json()
+
+        // Poll for processing completion
+        let processingStatus = 'pending'
+        while (processingStatus !== 'completed' && processingStatus !== 'error') {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          const statusResp = await fetch(`/api/audio/status/${request_id}`)
+          if (statusResp.ok) {
+            const statusData = await statusResp.json()
+            processingStatus = statusData.status
+          } else {
+            processingStatus = 'error'
+          }
+        }
+
+        if (processingStatus === 'completed') {
+          const downloadResp = await fetch(`/api/audio/download/${request_id}`)
+          if (downloadResp.ok) {
+            const processedAudioBlob = await downloadResp.blob()
+            const processedFileName = `processed_${currentAudioFile!.name}`
+            const downloadUrl = URL.createObjectURL(processedAudioBlob)
+
+            // Update uploaded file status
+            const existingUploads = localStorage.getItem('WAVEQ_UPLOADED_FILES')
+            if (existingUploads) {
+              try {
+                const uploads = JSON.parse(existingUploads)
+                const fileIndex = uploads.findIndex((f: any) => f.name === currentAudioFile!.name)
+                if (fileIndex !== -1) {
+                  uploads[fileIndex].status = 'processed'
+                  uploads[fileIndex].downloadUrl = downloadUrl
+                  uploads[fileIndex].operations = [currentInput]
+                  localStorage.setItem('WAVEQ_UPLOADED_FILES', JSON.stringify(uploads))
+                }
+              } catch (err) {
+                console.error('Error updating uploaded file:', err)
+              }
+            }
+
+            // Save to exports list
+            const exportedFile = {
+              id: Date.now().toString(),
+              name: processedFileName,
+              originalName: currentAudioFile!.name,
+              processedAt: new Date(),
+              size: processedAudioBlob.size,
+              downloadUrl: downloadUrl,
+              operations: [currentInput]
+            }
+
+            const existingExports = localStorage.getItem('WAVEQ_EXPORTED_FILES')
+            let exports = []
+            if (existingExports) {
+              try {
+                exports = JSON.parse(existingExports)
+              } catch (error) {
+                console.error('Error parsing exported files:', error)
+              }
+            }
+            exports.unshift(exportedFile)
+            localStorage.setItem('WAVEQ_EXPORTED_FILES', JSON.stringify(exports))
+
+            const aiResponse: ChatMessage = {
+              id: (Date.now() + 2).toString(),
+              text: `✅ הקובץ עובד בהצלחה!\n\n📁 הקובץ נשמר בקובצי הייצוא ומוכן להורדה!`,
+              sender: 'assistant',
+              timestamp: new Date(),
+              audioFile: processedFileName,
+              downloadUrl: downloadUrl,
+              status: 'processed'
+            }
+
+            const updatedMessagesWithAI = [...updatedMessages, aiResponse]
+            setMessages(updatedMessagesWithAI)
+            saveMessagesToStorage(updatedMessagesWithAI)
+          } else {
+            const errorResponse: ChatMessage = {
+              id: (Date.now() + 2).toString(),
+              text: '❌ שגיאה בהורדת הקובץ המעובד',
+              sender: 'assistant',
+              timestamp: new Date()
+            }
+            const updatedMessagesWithError = [...updatedMessages, errorResponse]
+            setMessages(updatedMessagesWithError)
+            saveMessagesToStorage(updatedMessagesWithError)
+          }
+        } else {
+          const errorResponse: ChatMessage = {
+            id: (Date.now() + 2).toString(),
+            text: '❌ שגיאה בעיבוד האודיו',
             sender: 'assistant',
             timestamp: new Date()
           }
@@ -691,12 +736,29 @@ ${audioAnalysis.quickActions}
                          ? 'bg-gray-800 text-gray-100 border border-gray-700'
                          : 'bg-white text-gray-800 border border-gray-200'
                    }`}>
-                     {message.audioFile && (
-                       <div className="flex items-center gap-2 mb-3 text-sm opacity-80 bg-black/10 rounded-lg p-2">
-                         <FileAudio className="w-4 h-4" />
-                         {message.audioFile}
-                       </div>
-                     )}
+                    {message.audioFile && (
+                      <div className="flex items-center gap-2 mb-3 text-sm opacity-80 bg-black/10 rounded-lg p-2">
+                        <FileAudio className="w-4 h-4" />
+                        {message.audioFile}
+                        {message.status && (
+                          <span
+                            className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                              message.status === 'uploaded'
+                                ? 'bg-blue-100 text-blue-800'
+                                : message.status === 'processed'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {message.status === 'uploaded'
+                              ? 'הועלה'
+                              : message.status === 'processed'
+                                ? 'עובד'
+                                : 'שגיאה'}
+                          </span>
+                        )}
+                      </div>
+                    )}
                      <p 
                        className="whitespace-pre-wrap leading-relaxed"
                        style={{ 
