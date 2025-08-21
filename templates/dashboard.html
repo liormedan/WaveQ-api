@@ -272,6 +272,7 @@
                     requests_per_hour: 0,
                     peak_hour: '-'
                 },
+                requests: [],
                 recentActivity: [],
                 newRequest: {
                     client_name: '',
@@ -282,10 +283,10 @@
                 },
                 showNewRequestModal: false,
                 lastUpdate: 'עכשיו',
-                
+
                 async init() {
-                    await this.refreshData();
                     this.initializeCharts();
+                    await this.refreshData();
                     // Auto-refresh every 30 seconds
                     setInterval(() => this.refreshData(), 30000);
                 },
@@ -297,22 +298,40 @@
                             fetch('/api/requests')
                         ]);
                         
-                        if (statsResponse.ok) {
-                            const data = await statsResponse.json();
-                            this.stats = {
-                                ...this.stats,
-                                ...data,
-                                completed_today: Math.floor(Math.random() * 20) + 5, // Mock data
-                                requests_per_hour: Math.floor(Math.random() * 10) + 2,
-                                peak_hour: '14:00'
-                            };
-                        }
-                        
-                        if (requestsResponse.ok) {
-                            const data = await requestsResponse.json();
-                            this.updateRecentActivity(data.requests);
-                        }
-                        
+                        const statsData = statsResponse.ok ? await statsResponse.json() : {};
+                        const requestsData = requestsResponse.ok ? await requestsResponse.json() : { requests: [] };
+
+                        this.requests = requestsData.requests || [];
+                        this.updateRecentActivity(this.requests);
+
+                        // Calculate additional statistics based on requests
+                        const now = new Date();
+                        const todayStr = now.toDateString();
+                        const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+                        const completedToday = this.requests.filter(r =>
+                            r.status === 'completed' && new Date(r.updated_at).toDateString() === todayStr
+                        ).length;
+
+                        const requestsLast24h = this.requests.filter(r => new Date(r.created_at) >= last24h);
+                        const requestsPerHour = requestsLast24h.length / 24;
+
+                        const hourCounts = Array(24).fill(0);
+                        requestsLast24h.forEach(r => {
+                            const hour = new Date(r.created_at).getHours();
+                            hourCounts[hour]++;
+                        });
+                        const peakHourIndex = hourCounts.indexOf(Math.max(...hourCounts));
+                        const peakHour = `${peakHourIndex.toString().padStart(2, '0')}:00`;
+
+                        this.stats = {
+                            ...this.stats,
+                            ...statsData,
+                            completed_today: completedToday,
+                            requests_per_hour: parseFloat(requestsPerHour.toFixed(1)),
+                            peak_hour: peakHour
+                        };
+
                         this.lastUpdate = new Date().toLocaleTimeString('he-IL');
                         this.updateCharts();
                     } catch (error) {
@@ -349,7 +368,7 @@
                         data: {
                             labels: ['הפחתת רעש', 'נרמול עוצמה', 'קיצוץ שתיקות', 'שיפור אודיו', 'המרת פורמט'],
                             datasets: [{
-                                data: [12, 19, 8, 15, 6],
+                                data: [0, 0, 0, 0, 0],
                                 backgroundColor: ['#8B5CF6', '#F59E0B', '#10B981', '#3B82F6', '#EF4444']
                             }]
                         },
@@ -364,10 +383,10 @@
                     this.dailyRequestsChart = new Chart(ctx2, {
                         type: 'line',
                         data: {
-                            labels: ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'],
+                            labels: [],
                             datasets: [{
                                 label: 'בקשות יומיות',
-                                data: [65, 59, 80, 81, 56, 55, 40],
+                                data: [],
                                 borderColor: '#8B5CF6',
                                 backgroundColor: 'rgba(139, 92, 246, 0.1)',
                                 tension: 0.4
@@ -384,18 +403,32 @@
                         }
                     });
                 },
-                
+
                 updateCharts() {
-                    // Update chart data based on current stats
                     if (this.requestsByTypeChart) {
-                        this.requestsByTypeChart.data.datasets[0].data = [
-                            Math.floor(Math.random() * 20) + 10,
-                            Math.floor(Math.random() * 20) + 15,
-                            Math.floor(Math.random() * 15) + 5,
-                            Math.floor(Math.random() * 20) + 10,
-                            Math.floor(Math.random() * 10) + 3
-                        ];
+                        const typeOrder = ['noise_reduction', 'volume_normalization', 'trim_silence', 'audio_enhancement', 'format_conversion'];
+                        const counts = typeOrder.map(t => this.requests.filter(r => r.edit_type === t).length);
+                        this.requestsByTypeChart.data.datasets[0].data = counts;
                         this.requestsByTypeChart.update();
+                    }
+
+                    if (this.dailyRequestsChart) {
+                        const labels = [];
+                        const data = [];
+                        for (let i = 6; i >= 0; i--) {
+                            const date = new Date();
+                            date.setDate(date.getDate() - i);
+                            const label = new Intl.DateTimeFormat('he-IL', { weekday: 'narrow' }).format(date);
+                            labels.push(label);
+                            const count = this.requests.filter(r => {
+                                const d = new Date(r.created_at);
+                                return d.toDateString() === date.toDateString();
+                            }).length;
+                            data.push(count);
+                        }
+                        this.dailyRequestsChart.data.labels = labels;
+                        this.dailyRequestsChart.data.datasets[0].data = data;
+                        this.dailyRequestsChart.update();
                     }
                 },
                 
