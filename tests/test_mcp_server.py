@@ -70,6 +70,7 @@ def sample_wav(tmp_path):
         ("change_pitch", {"pitch_steps": 2}),
         ("add_reverb", {"room_size": 0.1, "damping": 0.1}),
         ("noise_reduction", {"strength": 0.1}),
+        ("augment_audio", {"noise_level": 0.01, "pitch_shift": 1}),
         ("equalize_audio", {"low_gain": 1.0, "mid_gain": 1.0, "high_gain": 1.0}),
         ("compress_audio", {"threshold": -20}),
 
