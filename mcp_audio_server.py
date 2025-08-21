@@ -25,6 +25,7 @@ import torchaudio
 
 # Import our Audio Agent
 from audio_agent_library import AudioAgent
+from file_utils import cleanup_file
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -374,6 +375,10 @@ class AudioProcessingMCP:
                 continue
 
             result = await method(audio_path, params)
+
+            cleanup_file(audio_path)
+            for extra in params.get("additional_files", []):
+                cleanup_file(extra)
 
             await client.publish(
                 f"audio/results/{req_id}",
