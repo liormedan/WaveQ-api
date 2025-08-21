@@ -9,333 +9,164 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-50 font-sans">
-    <div x-data="clientsManager()" class="min-h-screen">
-        <!-- Sidebar -->
-        <div class="fixed inset-y-0 right-0 z-50 w-64 bg-gradient-to-b from-purple-600 to-purple-800 shadow-lg">
-            <div class="flex items-center justify-center h-16 bg-purple-700">
-                <h1 class="text-white text-xl font-bold">WaveQ Audio</h1>
-            </div>
-            <nav class="mt-8">
-                <a href="/" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
-                    <i class="fas fa-tachometer-alt ml-3"></i>
-                    <span>לוח בקרה</span>
-                </a>
-                <a href="/requests" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
-                    <i class="fas fa-headphones ml-3"></i>
-                    <span>בקשות אודיו</span>
-                </a>
-                <a href="/clients" class="flex items-center px-6 py-3 text-white bg-purple-700 transition-colors">
-                    <i class="fas fa-users ml-3"></i>
-                    <span>לקוחות</span>
-                </a>
-                <a href="/analytics" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
-                    <i class="fas fa-chart-line ml-3"></i>
-                    <span>ניתוח נתונים</span>
-                </a>
-                <a href="/settings" class="flex items-center px-6 py-3 text-white hover:bg-purple-700 transition-colors">
-                    <i class="fas fa-cog ml-3"></i>
-                    <span>הגדרות</span>
-                </a>
-            </nav>
-        </div>
+<div x-data="clientsManager()" x-init="init()" class="p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-semibold text-gray-800">ניהול לקוחות</h2>
+        <button @click="openNew" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+            <i class="fas fa-plus ml-2"></i> לקוח חדש
+        </button>
+    </div>
 
-        <!-- Main Content -->
-        <div class="mr-64">
-            <!-- Header -->
-            <header class="bg-white shadow-sm border-b border-gray-200">
-                <div class="flex items-center justify-between px-6 py-4">
-                    <h2 class="text-2xl font-semibold text-gray-800">ניהול לקוחות</h2>
-                    <div class="flex items-center space-x-4 space-x-reverse">
-                        <button @click="showNewClientModal = true" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-                            <i class="fas fa-plus ml-2"></i>
-                            לקוח חדש
-                        </button>
-                        <button @click="exportClients()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                            <i class="fas fa-download ml-2"></i>
-                            ייצוא
-                        </button>
-                    </div>
+    <div class="grid grid-cols-1 gap-4">
+        <template x-for="client in clients" :key="client.id">
+            <div class="bg-white rounded-lg shadow p-4 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900" x-text="client.name"></h3>
+                    <p class="text-sm text-gray-600" x-text="client.email"></p>
                 </div>
-            </header>
+                <div class="flex items-center space-x-2 space-x-reverse">
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full"
+                          :class="{
+                            'bg-green-100 text-green-800': client.status === 'active',
+                            'bg-gray-100 text-gray-800': client.status === 'inactive',
+                            'bg-purple-100 text-purple-800': client.status === 'premium'
+                          }"
+                          x-text="getStatusLabel(client.status)"></span>
+                    <button @click="startEdit(client)" class="text-blue-600 hover:text-blue-800"><i class="fas fa-edit"></i></button>
+                    <button @click="removeClient(client.id)" class="text-red-600 hover:text-red-800"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        </template>
+    </div>
 
-            <!-- Search and Filters -->
-            <div class="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
-                <div class="flex flex-wrap items-center gap-4">
-                    <div class="flex-1 min-w-64">
-                        <input type="text" x-model="searchQuery" placeholder="חיפוש לפי שם, אימייל או טלפון..."
-                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                    </div>
-                    <select x-model="statusFilter" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                        <option value="">כל הסטטוסים</option>
+    <!-- New Client Modal -->
+    <div x-show="showNew" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-md w-96">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">לקוח חדש</h3>
+            <form @submit.prevent="submitNew" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">שם מלא</label>
+                    <input type="text" x-model="form.name" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
+                    <input type="email" x-model="form.email" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
+                    <select x-model="form.status" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                         <option value="active">פעיל</option>
                         <option value="inactive">לא פעיל</option>
                         <option value="premium">פרימיום</option>
                     </select>
                 </div>
-            </div>
-
-            <!-- Clients Grid -->
-            <main class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <template x-for="client in filteredClients" :key="client.id">
-                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                            <div class="flex items-center justify-between mb-4">
-                                <div class="flex items-center">
-                                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                                        <i class="fas fa-user text-purple-600 text-xl"></i>
-                                    </div>
-                                    <div class="mr-3">
-                                        <h3 class="text-lg font-semibold text-gray-900" x-text="client.name"></h3>
-                                        <p class="text-sm text-gray-600" x-text="client.email"></p>
-                                    </div>
-                                </div>
-                                <span class="px-2 py-1 text-xs font-semibold rounded-full"
-                                      :class="{
-                                          'bg-green-100 text-green-800': client.status === 'active',
-                                          'bg-gray-100 text-gray-800': client.status === 'inactive',
-                                          'bg-purple-100 text-purple-800': client.status === 'premium'
-                                      }"
-                                      x-text="getStatusLabel(client.status)"></span>
-                            </div>
-                            
-                            <div class="space-y-2 mb-4">
-                                <div class="flex items-center text-sm text-gray-600">
-                                    <i class="fas fa-phone ml-2 text-gray-400"></i>
-                                    <span x-text="client.phone"></span>
-                                </div>
-                                <div class="flex items-center text-sm text-gray-600">
-                                    <i class="fas fa-map-marker-alt ml-2 text-gray-400"></i>
-                                    <span x-text="client.location"></span>
-                                </div>
-                                <div class="flex items-center text-sm text-gray-600">
-                                    <i class="fas fa-calendar ml-2 text-gray-400"></i>
-                                    <span>נרשם: <span x-text="formatDate(client.registered_date)"></span></span>
-                                </div>
-                            </div>
-                            
-                            <div class="border-t border-gray-200 pt-4">
-                                <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
-                                    <span>סה"כ בקשות:</span>
-                                    <span class="font-semibold" x-text="client.total_requests">0</span>
-                                </div>
-                                <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
-                                    <span>בקשות פעילות:</span>
-                                    <span class="font-semibold" x-text="client.active_requests">0</span>
-                                </div>
-                                <div class="flex items-center justify-between text-sm text-gray-600">
-                                    <span>אחוז הצלחה:</span>
-                                    <span class="font-semibold" x-text="client.success_rate">0%</span>
-                                </div>
-                            </div>
-                            
-                            <div class="flex space-x-2 space-x-reverse mt-4">
-                                <button @click="viewClientDetails(client)"
-                                        class="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm">
-                                    <i class="fas fa-eye ml-1"></i>
-                                    פרטים
-                                </button>
-                                <button @click="editClient(client)"
-                                        class="flex-1 bg-yellow-600 text-white px-3 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-sm">
-                                    <i class="fas fa-edit ml-1"></i>
-                                    ערוך
-                                </button>
-                                <button @click="deleteClient(client.id)"
-                                        class="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </template>
+                <div class="flex space-x-3 space-x-reverse">
+                    <button type="submit" class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">שמור</button>
+                    <button type="button" @click="showNew=false" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors">ביטול</button>
                 </div>
-
-                <!-- Empty State -->
-                <div x-show="filteredClients.length === 0" class="text-center py-12">
-                    <i class="fas fa-users text-gray-400 text-6xl mb-4"></i>
-                    <h3 class="text-lg font-medium text-gray-900 mb-2">אין לקוחות</h3>
-                    <p class="text-gray-600 mb-4">התחל להוסיף לקוחות חדשים למערכת</p>
-                    <button @click="showNewClientModal = true" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-                        <i class="fas fa-plus ml-2"></i>
-                        הוסף לקוח ראשון
-                    </button>
-                </div>
-            </main>
-        </div>
-
-        <!-- New Client Modal -->
-        <div x-show="showNewClientModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-                <div class="mt-3">
-                    <h3 class="text-lg font-medium text-gray-900 mb-4">לקוח חדש</h3>
-                    <form @submit.prevent="submitNewClient" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">שם מלא</label>
-                            <input type="text" x-model="newClient.name" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">אימייל</label>
-                            <input type="email" x-model="newClient.email" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">טלפון</label>
-                            <input type="tel" x-model="newClient.phone" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">מיקום</label>
-                            <input type="text" x-model="newClient.location" required
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">סטטוס</label>
-                            <select x-model="newClient.status" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                                <option value="active">פעיל</option>
-                                <option value="inactive">לא פעיל</option>
-                                <option value="premium">פרימיום</option>
-                            </select>
-                        </div>
-                        <div class="flex space-x-3 space-x-reverse">
-                            <button type="submit" 
-                                    class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-                                הוסף לקוח
-                            </button>
-                            <button type="button" @click="showNewClientModal = false"
-                                    class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors">
-                                ביטול
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 
-    <script>
-        function clientsManager() {
-            return {
-                clients: [
-                    {
-                        id: 1,
-                        name: 'יוסי כהן',
-                        email: 'yossi@example.com',
-                        phone: '050-1234567',
-                        location: 'תל אביב',
-                        status: 'active',
-                        registered_date: '2024-01-15',
-                        total_requests: 25,
-                        active_requests: 3,
-                        success_rate: 96
-                    },
-                    {
-                        id: 2,
-                        name: 'שרה לוי',
-                        email: 'sara@example.com',
-                        phone: '052-9876543',
-                        location: 'ירושלים',
-                        status: 'premium',
-                        registered_date: '2023-11-20',
-                        total_requests: 42,
-                        active_requests: 1,
-                        success_rate: 98
-                    },
-                    {
-                        id: 3,
-                        name: 'דוד ישראלי',
-                        email: 'david@example.com',
-                        phone: '054-5555555',
-                        location: 'חיפה',
-                        status: 'active',
-                        registered_date: '2024-02-01',
-                        total_requests: 18,
-                        active_requests: 2,
-                        success_rate: 94
-                    }
-                ],
-                filteredClients: [],
-                searchQuery: '',
-                statusFilter: '',
-                newClient: {
-                    name: '',
-                    email: '',
-                    phone: '',
-                    location: '',
-                    status: 'active'
-                },
-                showNewClientModal: false,
-                
-                async init() {
-                    this.applyFilters();
-                },
-                
-                applyFilters() {
-                    this.filteredClients = this.clients.filter(client => {
-                        const matchesSearch = !this.searchQuery || 
-                            client.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-                            client.email.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
-                            client.phone.includes(this.searchQuery);
-                        
-                        const matchesStatus = !this.statusFilter || client.status === this.statusFilter;
-                        
-                        return matchesSearch && matchesStatus;
-                    });
-                },
-                
-                getStatusLabel(status) {
-                    const labels = {
-                        'active': 'פעיל',
-                        'inactive': 'לא פעיל',
-                        'premium': 'פרימיום'
-                    };
-                    return labels[status] || status;
-                },
-                
-                formatDate(dateString) {
-                    const date = new Date(dateString);
-                    return date.toLocaleDateString('he-IL');
-                },
-                
-                submitNewClient() {
-                    const newId = Math.max(...this.clients.map(c => c.id)) + 1;
-                    const client = {
-                        ...this.newClient,
-                        id: newId,
-                        registered_date: new Date().toISOString().split('T')[0],
-                        total_requests: 0,
-                        active_requests: 0,
-                        success_rate: 0
-                    };
-                    
-                    this.clients.push(client);
-                    this.newClient = { name: '', email: '', phone: '', location: '', status: 'active' };
-                    this.showNewClientModal = false;
-                    this.applyFilters();
-                    
-                    alert('הלקוח נוסף בהצלחה!');
-                },
-                
-                viewClientDetails(client) {
-                    alert(`פרטי לקוח: ${client.name}\nאימייל: ${client.email}\nטלפון: ${client.phone}\nמיקום: ${client.location}\nסטטוס: ${this.getStatusLabel(client.status)}`);
-                },
-                
-                editClient(client) {
-                    alert(`עריכת לקוח: ${client.name} - בפיתוח`);
-                },
-                
-                deleteClient(clientId) {
-                    if (confirm('האם אתה בטוח שברצונך למחוק לקוח זה?')) {
-                        this.clients = this.clients.filter(c => c.id !== clientId);
-                        this.applyFilters();
-                        alert('הלקוח נמחק בהצלחה');
-                    }
-                },
-                
-                exportClients() {
-                    alert('ייצוא לקוחות - בפיתוח');
-                }
+    <!-- Edit Client Modal -->
+    <div x-show="showEdit" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div class="bg-white p-6 rounded-md w-96">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">עריכת לקוח</h3>
+            <form @submit.prevent="submitEdit" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">שם מלא</label>
+                    <input type="text" x-model="formEdit.name" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">אימייל</label>
+                    <input type="email" x-model="formEdit.email" required
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">סטטוס</label>
+                    <select x-model="formEdit.status" required
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                        <option value="active">פעיל</option>
+                        <option value="inactive">לא פעיל</option>
+                        <option value="premium">פרימיום</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3 space-x-reverse">
+                    <button type="submit" class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">עדכן</button>
+                    <button type="button" @click="showEdit=false" class="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition-colors">ביטול</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function clientsManager() {
+    return {
+        clients: [],
+        showNew: false,
+        showEdit: false,
+        form: { name: '', email: '', status: 'active' },
+        formEdit: { id: null, name: '', email: '', status: 'active' },
+        async init() {
+            await this.load();
+        },
+        async load() {
+            const res = await fetch('/api/clients');
+            if (res.ok) {
+                this.clients = await res.json();
+            }
+        },
+        getStatusLabel(status) {
+            const labels = { active: 'פעיל', inactive: 'לא פעיל', premium: 'פרימיום' };
+            return labels[status] || status;
+        },
+        openNew() {
+            this.form = { name: '', email: '', status: 'active' };
+            this.showNew = true;
+        },
+        async submitNew() {
+            const res = await fetch('/api/clients', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.form)
+            });
+            if (res.ok) {
+                const client = await res.json();
+                this.clients.push(client);
+                this.showNew = false;
+            }
+        },
+        startEdit(client) {
+            this.formEdit = { ...client };
+            this.showEdit = true;
+        },
+        async submitEdit() {
+            const res = await fetch(`/api/clients/${this.formEdit.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.formEdit)
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                const idx = this.clients.findIndex(c => c.id === updated.id);
+                if (idx !== -1) this.clients.splice(idx, 1, updated);
+                this.showEdit = false;
+            }
+        },
+        async removeClient(id) {
+            if (!confirm('האם למחוק לקוח זה?')) return;
+            const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
+            if (res.ok) {
+                this.clients = this.clients.filter(c => c.id !== id);
             }
         }
-    </script>
+    }
+}
+</script>
 </body>
 </html>
