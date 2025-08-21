@@ -11,6 +11,30 @@ from pathlib import Path
 # Provide a minimal stub for asyncio_mqtt to allow importing the server
 sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
 
+# Provide a stub for audiomentations if it's not installed
+if "audiomentations" not in sys.modules:
+    class _StubTransform:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __call__(self, samples, sample_rate):
+            return samples
+
+    class _StubCompose:
+        def __init__(self, transforms):
+            self.transforms = transforms
+
+        def __call__(self, samples, sample_rate):
+            for t in self.transforms:
+                samples = t(samples, sample_rate)
+            return samples
+
+    stub_module = types.ModuleType("audiomentations")
+    stub_module.Compose = _StubCompose
+    stub_module.AddGaussianNoise = _StubTransform
+    stub_module.PitchShift = _StubTransform
+    sys.modules["audiomentations"] = stub_module
+
 # Ensure the project root is on the path when running tests directly
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
@@ -41,7 +65,9 @@ def sample_wav(tmp_path):
         ("noise_reduction", {"strength": 0.1}),
         ("equalize_audio", {"low_gain": 1.0, "mid_gain": 1.0, "high_gain": 1.0}),
         ("compress_audio", {"threshold": -20}),
+
         ("voice_activity_detection", {"remove_silence": True}),
+
     ],
 )
 def test_audio_operations(sample_wav, operation, params):
@@ -81,6 +107,7 @@ def test_process_operations(sample_wav):
     server = AudioProcessingMCP()
     ops = [
         {"name": "trim", "start": 0, "end": 0.5},
+        {"name": "augment", "noise_level": 0.01, "pitch_shift": 0},
         {"name": "fade_in", "duration": 100},
     ]
     out_path = asyncio.run(server.process_operations(sample_wav, ops))

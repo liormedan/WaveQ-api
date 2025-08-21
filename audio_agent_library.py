@@ -130,6 +130,24 @@ class AudioAgent:
                     "squash the peaks"
                 ]
             },
+            "augment": {
+                "aliases": [
+                    "augment",
+                    "augmentation",
+                    "randomize",
+                    "randomise",
+                    "add noise",
+                    "noise",
+                    "pitch shift"
+                ],
+                "description": "Apply random audio augmentations like noise and pitch shift",
+                "parameters": ["noise_level", "pitch_shift"],
+                "examples": [
+                    "augment with noise 5% and pitch up 2 semitones",
+                    "add noise and random pitch shift",
+                    "randomize the audio"
+                ]
+            },
             "merge": {
                 "aliases": ["combine", "join", "concatenate", "add"],
                 "description": "Merge multiple audio files",
@@ -152,12 +170,12 @@ class AudioAgent:
             },
             "convert_format": {
                 "aliases": ["convert", "export", "save as", "format"],
-                "description": "Convert to different audio format",
-                "parameters": ["target_format", "quality"],
+                "description": "Convert to different audio format with optional bitrate, sample rate and channels",
+                "parameters": ["target_format", "bitrate", "sample_rate", "channels"],
                 "examples": [
-                    "convert to MP3",
-                    "export as WAV",
-                    "save as high quality FLAC"
+                    "convert to MP3 at 128k",
+                    "export as WAV with 44100 Hz",
+                    "save as stereo FLAC"
                 ]
             },
             "voice_activity_detection": {
@@ -306,6 +324,7 @@ class AudioAgent:
             else:
                 parameters["duration"] = 1.0  # Default 1 second
 
+
         elif operation == "voice_activity_detection":
             remove_phrases = [
                 "remove silence",
@@ -314,6 +333,7 @@ class AudioAgent:
                 "silent parts",
             ]
             parameters["remove_silence"] = any(p in text for p in remove_phrases)
+
 
         elif operation == "convert_format":
             # Extract format and quality
@@ -354,6 +374,7 @@ class AudioAgent:
             "change_speed",    # Then speed/pitch changes
             "change_pitch",
             "add_reverb",      # Then effects
+            "augment",
             "split",           # Then structural changes
             "merge",
             "convert_format"   # Convert format last

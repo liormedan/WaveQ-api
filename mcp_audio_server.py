@@ -19,6 +19,9 @@ import soundfile as sf
 import librosa
 import webrtcvad
 
+from audiomentations import Compose, AddGaussianNoise, PitchShift
+
+
 # Import our Audio Agent
 from audio_agent_library import AudioAgent
 
@@ -189,6 +192,7 @@ class AudioProcessingMCP:
         processed.export(out_path, format="wav")
         return {"output_path": str(out_path)}
 
+
     async def voice_activity_detection(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Detect voice activity or remove silent segments using WebRTC VAD"""
         aggressiveness = int(params.get("aggressiveness", 2))
@@ -236,6 +240,7 @@ class AudioProcessingMCP:
 
         return result
 
+
     async def merge_audio_files(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         files = [file_path] + params.get("additional_files", [])
         segments = [AudioSegment.from_file(p) for p in files]
@@ -259,9 +264,21 @@ class AudioProcessingMCP:
 
     async def convert_format(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         target = params.get("target_format", "wav")
-        audio = AudioSegment.from_file(file_path)
+        bitrate = params.get("bitrate")
+        sample_rate = params.get("sample_rate")
+        channels = params.get("channels")
         out_path = self.processed_dir / f"convert_{Path(file_path).stem}.{target}"
-        audio.export(out_path, format=target)
+
+        stream = ffmpeg.input(file_path)
+        kwargs = {}
+        if bitrate:
+            kwargs["audio_bitrate"] = bitrate
+        if sample_rate:
+            kwargs["ar"] = sample_rate
+        if channels:
+            kwargs["ac"] = channels
+        stream = ffmpeg.output(stream, str(out_path), format=target, **kwargs)
+        ffmpeg.run(stream, overwrite_output=True)
         return {"output_path": str(out_path)}
 
     async def process_operations(self, file_path: str, operations: List[Dict[str, Any]]) -> str:
@@ -277,7 +294,9 @@ class AudioProcessingMCP:
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
+
             "voice_activity_detection": self.voice_activity_detection,
+
         }
         for op in operations:
             name = op.get("name")
@@ -314,7 +333,9 @@ class AudioProcessingMCP:
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
+
             "voice_activity_detection": self.voice_activity_detection,
+
             "merge": self.merge_audio_files,
             "split": self.split_audio,
             "convert": self.convert_format,
