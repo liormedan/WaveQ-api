@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Upload, Send, FileAudio, MessageCircle, Bot, User } from 'lucide-react'
 import Link from 'next/link'
 import { AudioVisualization } from './audio-visualization'
+import { CodeCanvas } from './code-canvas'
 
 interface ChatMessage {
   id: string
@@ -20,6 +21,7 @@ interface ChatMessage {
   originalAudioFile?: File
   showVisualization?: boolean
   status?: 'uploaded' | 'processed' | 'error'
+  code?: string
 }
 
 interface ChatInterfaceProps {
@@ -294,6 +296,28 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
       originalAudioFile: undefined // Remove File objects before saving
     }))
     localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(messagesForStorage))
+  }
+
+  const handleRunCode = async (code: string) => {
+    try {
+      await fetch('/api/run-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      })
+    } catch (error) {
+      console.error('Error running code:', error)
+    }
+  }
+
+  const handleDownloadCode = (code: string) => {
+    const blob = new Blob([code], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'code.txt'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const handleSendMessage = async () => {
@@ -759,15 +783,32 @@ ${audioAnalysis.quickActions}
                         )}
                       </div>
                     )}
-                     <p 
+                     <p
                        className="whitespace-pre-wrap leading-relaxed"
-                       style={{ 
+                       style={{
                          textAlign: detectLanguage(message.text) === 'rtl' ? 'right' : 'left',
                          direction: detectLanguage(message.text)
                        }}
                      >
                        {message.text}
                      </p>
+                     {message.code && (
+                       <div className="mt-3">
+                         <CodeCanvas code={message.code} theme={theme} />
+                         <div className="flex gap-2 mt-2">
+                           <Button size="sm" onClick={() => handleRunCode(message.code!)}>
+                             Run
+                           </Button>
+                           <Button
+                             size="sm"
+                             variant="secondary"
+                             onClick={() => handleDownloadCode(message.code!)}
+                           >
+                             Download
+                           </Button>
+                         </div>
+                       </div>
+                     )}
                      {message.downloadUrl && (
                        <div className="mt-3">
                          <a
