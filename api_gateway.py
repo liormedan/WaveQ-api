@@ -599,10 +599,12 @@ async def get_supported_operations():
             }
         },
         "convert_format": {
-            "description": "Convert audio to different format",
+            "description": "Convert audio to different format with optional bitrate, sample rate and channels",
             "parameters": {
                 "target_format": {"type": "string", "description": "Target audio format", "default": "mp3"},
-                "quality": {"type": "string", "description": "Audio quality", "default": "high", "options": ["low", "medium", "high"]}
+                "bitrate": {"type": "string", "description": "Audio bitrate e.g. '128k'", "default": "192k"},
+                "sample_rate": {"type": "int", "description": "Sample rate in Hz", "default": 44100},
+                "channels": {"type": "int", "description": "Number of audio channels", "default": 2},
             }
         }
     }
