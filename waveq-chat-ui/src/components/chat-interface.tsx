@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Upload, Send, FileAudio, MessageCircle, Bot, User } from 'lucide-react'
 import Link from 'next/link'
+import { AudioVisualization } from './audio-visualization'
 
 interface ChatMessage {
   id: string
@@ -16,6 +17,8 @@ interface ChatMessage {
   timestamp: Date
   audioFile?: string
   downloadUrl?: string
+  originalAudioFile?: File
+  showVisualization?: boolean
 }
 
 interface ChatInterfaceProps {
@@ -48,14 +51,23 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
             text: `שלום! אני Gemini AI, מומחה בעיבוד אודיו. 
 
 🎵 **איך להשתמש במערכת:**
-1. **העלה קובץ אודיו** - לחץ על כפתור ההעלאה 📎
-2. **כתוב הוראות עיבוד** - תאר מה אתה רוצה לעשות לקובץ
-   - "הגבר את העוצמה ב-50%"
-   - "חתוך את ה-10 שניות הראשונות" 
-   - "הוסף באס חזק"
-   - "הפוך את הקול"
-   - "הפחת רעש"
-3. **שלח** - המערכת תעבד את הקובץ ותחזיר לך גרסה מעובדת 
+
+**📎 לעיבוד אודיו:**
+1. **העלה קובץ אודיו** - לחץ על כפתור ההעלאה
+2. **כתוב הוראות עיבוד** באותה הודעה:
+   • "הגבר את העוצמה ב-50%"
+   • "חתוך את ה-10 שניות הראשונות" 
+   • "הוסף באס ושפר איכות"
+   • "הפחת רעש ונרמל"
+3. **שלח** - המערכת תעבד ותחזיר קובץ מעובד
+
+**💬 לשאלות כלליות:**
+• שאל על טכניקות עיבוד אודיו
+• קבל עצות למיקס ומאסטרינג
+• למד על כלי עיבוד שונים
+
+**📁 קובצי ייצוא:**
+כל הקבצים המעובדים נשמרים בדף הייצואים
 
 איך אוכל לעזור לך היום? 🎧`,
             sender: 'assistant',
@@ -71,14 +83,23 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           text: `שלום! אני Gemini AI, מומחה בעיבוד אודיו. 
 
 🎵 **איך להשתמש במערכת:**
-1. **העלה קובץ אודיו** - לחץ על כפתור ההעלאה 📎
-2. **כתוב הוראות עיבוד** - תאר מה אתה רוצה לעשות לקובץ
-   - "הגבר את העוצמה ב-50%"
-   - "חתוך את ה-10 שניות הראשונות" 
-   - "הוסף באס חזק"
-   - "הפוך את הקול"
-   - "הפחת רעש"
-3. **שלח** - המערכת תעבד את הקובץ ותחזיר לך גרסה מעובדת 
+
+**📎 לעיבוד אודיו:**
+1. **העלה קובץ אודיו** - לחץ על כפתור ההעלאה
+2. **כתוב הוראות עיבוד** באותה הודעה:
+   • "הגבר את העוצמה ב-50%"
+   • "חתוך את ה-10 שניות הראשונות" 
+   • "הוסף באס ושפר איכות"
+   • "הפחת רעש ונרמל"
+3. **שלח** - המערכת תעבד ותחזיר קובץ מעובד
+
+**💬 לשאלות כלליות:**
+• שאל על טכניקות עיבוד אודיו
+• קבל עצות למיקס ומאסטרינג
+• למד על כלי עיבוד שונים
+
+**📁 קובצי ייצוא:**
+כל הקבצים המעובדים נשמרים בדף הייצואים
 
 איך אוכל לעזור לך היום? 🎧`,
           sender: 'assistant',
@@ -95,11 +116,191 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Function to analyze audio file and provide insights
+  const analyzeAudioFile = async (file: File) => {
+    const fileSize = formatFileSize(file.size)
+    const fileType = file.type || 'audio/mp3'
+    const fileName = file.name
+    
+    // Create audio context to analyze the file
+    const arrayBuffer = await file.arrayBuffer()
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+    
+    try {
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+      const duration = audioBuffer.duration
+      const sampleRate = audioBuffer.sampleRate
+      const numberOfChannels = audioBuffer.numberOfChannels
+      
+      // Analyze audio characteristics
+      const channelData = audioBuffer.getChannelData(0) // Get first channel
+      const length = channelData.length
+      
+      // Calculate RMS (Root Mean Square) for volume analysis
+      let rms = 0
+      let peak = 0
+      let zeroCrossings = 0
+      
+      for (let i = 0; i < length; i++) {
+        const sample = Math.abs(channelData[i])
+        rms += sample * sample
+        if (sample > peak) peak = sample
+        if (i > 0 && ((channelData[i] >= 0) !== (channelData[i-1] >= 0))) {
+          zeroCrossings++
+        }
+      }
+      rms = Math.sqrt(rms / length)
+      
+      // Determine quality based on sample rate and bit depth
+      let quality = 'בינונית'
+      if (sampleRate >= 48000) quality = 'גבוהה מאוד'
+      else if (sampleRate >= 44100) quality = 'גבוהה'
+      else if (sampleRate >= 22050) quality = 'בינונית'
+      else quality = 'נמוכה'
+      
+      // Generate detailed summary based on analysis
+      let summary = ''
+      
+      // Volume analysis
+      if (rms < 0.05) summary = '🔇 הקובץ שקט מאוד - דורש הגברת עוצמה משמעותית'
+      else if (rms < 0.1) summary = '🔈 הקובץ שקט יחסית - מומלץ הגברת עוצמה'
+      else if (rms < 0.3) summary = '🔉 הקובץ בעוצמה נמוכה-בינונית - ייתכן שצריך הגברה קלה'
+      else if (rms < 0.7) summary = '🔊 הקובץ מאוזן היטב מבחינת עוצמה - איכות טובה'
+      else if (rms < 0.9) summary = '🔊 הקובץ רם - ייתכן שצריך הפחתה קלה'
+      else summary = '🔊 הקובץ רם מאוד - דורש הפחתת עוצמה'
+      
+      // Peak analysis
+      if (peak > 0.98) summary += '\n⚠️ יש שיאים גבוהים מאוד שעלולים לגרום לעיוות חמור'
+      else if (peak > 0.95) summary += '\n⚠️ יש שיאים גבוהים שעלולים לגרום לעיוות'
+      else if (peak > 0.9) summary += '\n⚠️ יש שיאים גבוהים - מומלץ הגבלה'
+      else summary += '\n✅ אין שיאים בעייתיים - רמת עוצמה בטוחה'
+      
+      // Channel analysis
+      if (numberOfChannels === 1) summary += '\n📻 קובץ מונו (ערוץ אחד) - איכות בסיסית'
+      else summary += '\n🎧 קובץ סטריאו (שני ערוצים) - איכות מקצועית'
+      
+      // Sample rate analysis
+      if (sampleRate >= 48000) summary += '\n🎯 תדר דגימה גבוה מאוד - איכות מקצועית'
+      else if (sampleRate >= 44100) summary += '\n🎯 תדר דגימה סטנדרטי - איכות טובה'
+      else if (sampleRate >= 22050) summary += '\n🎯 תדר דגימה נמוך - איכות בסיסית'
+      else summary += '\n🎯 תדר דגימה נמוך מאוד - איכות ירודה'
+      
+      // Generate detailed recommendations
+      let recommendations = ''
+      
+      // Volume recommendations
+      if (rms < 0.05) recommendations += '🔊 **הגברת עוצמה משמעותית** - הקובץ שקט מדי\n'
+      else if (rms < 0.1) recommendations += '🔊 **הגברת עוצמה** - הקובץ שקט יחסית\n'
+      else if (rms > 0.9) recommendations += '🔊 **הפחתת עוצמה** - הקובץ רם מדי\n'
+      
+      // Peak recommendations
+      if (peak > 0.98) recommendations += '⚠️ **הגבלת שיאים דחופה** - מניעת עיוות\n'
+      else if (peak > 0.95) recommendations += '⚠️ **הגבלת שיאים** - מניעת עיוות\n'
+      else if (peak > 0.9) recommendations += '⚠️ **הגבלת שיאים קלה** - שיפור איכות\n'
+      
+      // Quality recommendations
+      if (sampleRate < 22050) recommendations += '🎯 **שדרוג איכות דחוף** - תדר דגימה נמוך מדי\n'
+      else if (sampleRate < 44100) recommendations += '🎯 **שדרוג איכות** - תדר דגימה נמוך\n'
+      
+      // Channel recommendations
+      if (numberOfChannels === 1) recommendations += '📻 **המרה לסטריאו** - שיפור איכות (אופציונלי)\n'
+      
+      // General recommendations
+      recommendations += '🎵 **עיבוד כללי מומלץ:**\n'
+      recommendations += '• נרמול עוצמה (Normalize)\n'
+      recommendations += '• הפחתת רעש (Noise Reduction)\n'
+      recommendations += '• שיפור איזון תדרים (EQ)\n'
+      
+      if (!recommendations.includes('🔊') && !recommendations.includes('⚠️') && !recommendations.includes('🎯')) {
+        recommendations = '✅ **הקובץ באיכות טובה מאוד!**\n'
+        recommendations += '• אין צורך בעיבוד דחוף\n'
+        recommendations += '• ניתן לשפר מעט עם עיבוד עדין'
+      }
+      
+      // Generate smart quick actions based on analysis
+      let quickActions = ''
+      
+      // Priority actions based on analysis
+      if (rms < 0.05) quickActions += '🚨 **פעולות דחופות:**\n'
+      else if (rms < 0.1) quickActions += '🔊 **פעולות מומלצות:**\n'
+      else quickActions += '🎵 **פעולות לשיפור:**\n'
+      
+      // Volume actions
+      if (rms < 0.05) quickActions += '• `הגבר את העוצמה ב-80%`\n'
+      else if (rms < 0.1) quickActions += '• `הגבר את העוצמה ב-50%`\n'
+      else if (rms > 0.9) quickActions += '• `הפחת את העוצמה ב-30%`\n'
+      
+      // Peak actions
+      if (peak > 0.98) quickActions += '• `הגבל שיאים דחוף ונרמל`\n'
+      else if (peak > 0.95) quickActions += '• `הגבל שיאים ונרמל`\n'
+      else if (peak > 0.9) quickActions += '• `הגבל שיאים קל`\n'
+      
+      // Quality actions
+      if (sampleRate < 22050) quickActions += '• `שדרג איכות דחוף ל-44.1kHz`\n'
+      else if (sampleRate < 44100) quickActions += '• `שדרג איכות ל-48kHz`\n'
+      
+      // General improvement actions
+      quickActions += '• `הפחת רעש ונרמל עוצמה`\n'
+      quickActions += '• `שפר איזון תדרים (EQ)`\n'
+      quickActions += '• `הוסף באס ושפר איכות כללית`\n'
+      
+      return {
+        summary,
+        fileSize,
+        fileType: fileType.split('/')[1]?.toUpperCase() || 'MP3',
+        quality,
+        duration: formatDuration(duration),
+        recommendations,
+        quickActions
+      }
+      
+    } catch (error) {
+      // Fallback analysis if audio decoding fails
+      return {
+        summary: 'לא ניתן לנתח את הקובץ - ייתכן שהוא פגום או בפורמט לא נתמך',
+        fileSize,
+        fileType: fileType.split('/')[1]?.toUpperCase() || 'MP3',
+        quality: 'לא ידוע',
+        duration: 'לא ידוע',
+        recommendations: '• בדוק שהקובץ תקין\n• נסה קובץ בפורמט אחר',
+        quickActions: '• `המר לפורמט MP3`\n• `בדוק תקינות הקובץ`'
+      }
+    } finally {
+      audioContext.close()
+    }
+  }
+
+  // Helper function to format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Helper function to format duration
+  const formatDuration = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
+
+  // Helper function to save messages to localStorage (without File objects)
+  const saveMessagesToStorage = (messagesToSave: ChatMessage[]) => {
+    const messagesForStorage = messagesToSave.map(msg => ({
+      ...msg,
+      originalAudioFile: undefined // Remove File objects before saving
+    }))
+    localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(messagesForStorage))
+  }
+
   const handleSendMessage = async () => {
     if (!inputText.trim() && !audioFile) return
 
     // Check if this is an audio processing request
     const isAudioProcessing = audioFile && inputText.trim()
+    const isAudioFileOnly = audioFile && !inputText.trim()
     
     const newMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -115,7 +316,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     setMessages(updatedMessages)
     
     // Save updated messages to localStorage
-    localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessages))
+    saveMessagesToStorage(updatedMessages)
     
     const currentInput = inputText
     const currentAudioFile = audioFile
@@ -137,12 +338,122 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         }
         const updatedMessagesWithError = [...messages, errorResponse]
         setMessages(updatedMessagesWithError)
-        localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithError))
+        saveMessagesToStorage(updatedMessagesWithError)
         setIsLoading(false)
         return
       }
 
-      if (isAudioProcessing) {
+      if (isAudioFileOnly) {
+        // Handle audio file upload without instructions - analyze the file automatically
+        
+        // Show loading message first
+        const loadingMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          text: `🔍 **מנתח את הקובץ "${currentAudioFile!.name}"...**
+
+המערכת בודקת את המאפיינים הטכניים של הקובץ ומכינה המלצות מותאמות אישית...`,
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+        const updatedMessagesWithLoading = [...updatedMessages, loadingMessage]
+        setMessages(updatedMessagesWithLoading)
+        saveMessagesToStorage(updatedMessagesWithLoading)
+        
+                 try {
+           // Analyze the audio file automatically
+           const audioAnalysis = await analyzeAudioFile(currentAudioFile!)
+           
+           // Update uploaded file with analysis data
+           const existingUploads = localStorage.getItem('WAVEQ_UPLOADED_FILES')
+           if (existingUploads) {
+             try {
+               let uploads = JSON.parse(existingUploads)
+               const fileIndex = uploads.findIndex((f: any) => f.name === currentAudioFile!.name)
+               if (fileIndex !== -1) {
+                 uploads[fileIndex].duration = audioAnalysis.duration
+                 uploads[fileIndex].quality = audioAnalysis.quality
+                 uploads[fileIndex].status = 'processed'
+                 localStorage.setItem('WAVEQ_UPLOADED_FILES', JSON.stringify(uploads))
+               }
+             } catch (error) {
+               console.error('Error updating uploaded file:', error)
+             }
+           }
+           
+           const aiResponse: ChatMessage = {
+             id: (Date.now() + 1).toString(),
+             text: `🎵 **ניתוח אוטומטי של הקובץ: "${currentAudioFile!.name}"**
+
+📊 **מה המערכת הבינה מהקובץ:**
+${audioAnalysis.summary}
+
+🔍 **פרטים טכניים:**
+• **גודל קובץ:** ${audioAnalysis.fileSize}
+• **סוג קובץ:** ${audioAnalysis.fileType}
+• **איכות:** ${audioAnalysis.quality}
+• **משך:** ${audioAnalysis.duration}
+
+💡 **המלצות לעיבוד אוטומטי:**
+${audioAnalysis.recommendations}
+
+🚀 **פעולות מהירות מומלצות:**
+${audioAnalysis.quickActions}
+
+📊 **ויזואליזציה גרפית מתצוגת הקובץ מטה** ⬇️
+
+📝 **איך לעבד את הקובץ:**
+1. העלה שוב את הקובץ 📎
+2. כתוב הוראות עיבוד ספציפיות
+3. שלח - ואני אעבד עבורך!
+
+מה תרצה לעשות עם הקובץ הזה? 🎧`,
+             sender: 'assistant',
+             timestamp: new Date(),
+             originalAudioFile: currentAudioFile!,
+             showVisualization: true
+           }
+          const updatedMessagesWithAI = [...updatedMessages, aiResponse]
+          setMessages(updatedMessagesWithAI)
+          saveMessagesToStorage(updatedMessagesWithAI)
+        } catch (error) {
+          // Fallback to basic message if analysis fails
+          const aiResponse: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            text: `🎵 **קובץ אודיו התקבל בהצלחה!**
+
+אני רואה שהעלת את הקובץ "${currentAudioFile!.name}". 
+
+💡 **כדי שאוכל לעבד את הקובץ עבורך, אנא הוסף הוראות עיבוד:**
+
+🔧 **דוגמאות לעיבוד:**
+• "הגבר את העוצמה ב-50%"
+• "חתוך את ה-10 השניות הראשונות"
+• "הוסף באס חזק ותכלים מסך"
+• "הפחת רעש ושפר איכות"
+• "הפוך את הקול (reverse)"
+• "הוסף echo"
+• "נרמל את העוצמה"
+
+📝 **איך לעשות זאת:**
+1. העלה שוב את הקובץ 📎
+2. כתוב הוראות עיבוד ברורות
+3. שלח - ואני אעבד את הקובץ עבורך!
+
+מה תרצה לעשות עם הקובץ הזה? 🎧
+
+🚀 **פעולות מהירות - לחץ כדי להעתיק:**
+• \`הגבר את העוצמה ב-30%\`
+• \`הפחת רעש ונרמל\`
+• \`חתוך את ה-5 שניות הראשונות\`
+• \`הוסף באס ושפר איכות\``,
+            sender: 'assistant',
+            timestamp: new Date()
+          }
+          const updatedMessagesWithAI = [...updatedMessages, aiResponse]
+          setMessages(updatedMessagesWithAI)
+          saveMessagesToStorage(updatedMessagesWithAI)
+        }
+      } else if (isAudioProcessing) {
         // Call Audio Processing API
         const formData = new FormData()
         formData.append('audio', currentAudioFile!)
@@ -171,9 +482,35 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           // Create download link for processed audio
           const downloadUrl = URL.createObjectURL(processedAudioBlob)
           
+          // Save to exports list
+          const exportedFile = {
+            id: Date.now().toString(),
+            name: processedFileName,
+            originalName: currentAudioFile!.name,
+            processedAt: new Date(),
+            size: processedAudioBlob.size,
+            downloadUrl: downloadUrl,
+            operations: [currentInput] // Store the user instruction as operation
+          }
+          
+          // Get existing exports
+          const existingExports = localStorage.getItem('WAVEQ_EXPORTED_FILES')
+          let exports = []
+          if (existingExports) {
+            try {
+              exports = JSON.parse(existingExports)
+            } catch (error) {
+              console.error('Error parsing exported files:', error)
+            }
+          }
+          
+          // Add new export
+          exports.unshift(exportedFile) // Add to beginning of array
+          localStorage.setItem('WAVEQ_EXPORTED_FILES', JSON.stringify(exports))
+          
           const aiResponse: ChatMessage = {
             id: (Date.now() + 2).toString(),
-            text: `✅ ${explanation}`,
+            text: `✅ ${explanation}\n\n📁 הקובץ נשמר בקובצי הייצוא ומוכן להורדה!`,
             sender: 'assistant',
             timestamp: new Date(),
             audioFile: processedFileName,
@@ -182,7 +519,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           
           const updatedMessagesWithAI = [...updatedMessages, aiResponse]
           setMessages(updatedMessagesWithAI)
-          localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithAI))
+          saveMessagesToStorage(updatedMessagesWithAI)
         } else {
           const errorData = await response.json()
           const errorResponse: ChatMessage = {
@@ -193,10 +530,10 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
           }
           const updatedMessagesWithError = [...updatedMessages, errorResponse]
           setMessages(updatedMessagesWithError)
-          localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithError))
+          saveMessagesToStorage(updatedMessagesWithError)
         }
       } else {
-        // Call regular Gemini Chat API
+        // Call regular Gemini Chat API - for general audio questions
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
@@ -221,7 +558,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         }
         const updatedMessagesWithAI = [...updatedMessages, aiResponse]
         setMessages(updatedMessagesWithAI)
-        localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithAI))
+        saveMessagesToStorage(updatedMessagesWithAI)
       } else {
         // Fallback response
         const fallbackResponse: ChatMessage = {
@@ -232,7 +569,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
         }
         const updatedMessagesWithFallback = [...updatedMessages, fallbackResponse]
         setMessages(updatedMessagesWithFallback)
-        localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithFallback))
+        saveMessagesToStorage(updatedMessagesWithFallback)
         
         // Show specific error if available
         if (data.error) {
@@ -251,7 +588,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
       }
       const updatedMessagesWithGeneralError = [...messages, errorResponse]
       setMessages(updatedMessagesWithGeneralError)
-      localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(updatedMessagesWithGeneralError))
+      saveMessagesToStorage(updatedMessagesWithGeneralError)
     } finally {
       setIsLoading(false)
     }
@@ -261,6 +598,37 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     const file = event.target.files?.[0]
     if (file && file.type.startsWith('audio/')) {
       setAudioFile(file)
+      
+      // Save uploaded file to localStorage
+      const uploadedFile = {
+        id: Date.now().toString(),
+        name: file.name,
+        originalName: file.name,
+        uploadedAt: new Date(),
+        size: file.size,
+        type: file.type,
+        status: 'uploaded' as const,
+        fileType: file.type,
+        duration: undefined,
+        quality: undefined,
+        operations: [],
+        downloadUrl: undefined
+      }
+      
+      // Get existing uploads
+      const existingUploads = localStorage.getItem('WAVEQ_UPLOADED_FILES')
+      let uploads = []
+      if (existingUploads) {
+        try {
+          uploads = JSON.parse(existingUploads)
+        } catch (error) {
+          console.error('Error parsing uploaded files:', error)
+        }
+      }
+      
+      // Add new upload
+      uploads.unshift(uploadedFile)
+      localStorage.setItem('WAVEQ_UPLOADED_FILES', JSON.stringify(uploads))
     }
   }
 
@@ -355,6 +723,17 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                        </div>
                      )}
                    </div>
+                   
+                   {/* Audio Visualization */}
+                   {message.showVisualization && message.originalAudioFile && (
+                     <div className="mt-4">
+                       <AudioVisualization 
+                         audioFile={message.originalAudioFile} 
+                         theme={theme}
+                       />
+                     </div>
+                   )}
+                   
                    <p className={`text-xs mt-2 ${
                      detectLanguage(message.text) === 'rtl' ? 'text-right' : 'text-left'
                    } ${
@@ -416,8 +795,8 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
                           onChange={(e) => setInputText(e.target.value)}
                           onKeyPress={handleKeyPress}
                           placeholder={audioFile 
-                            ? "כתוב הוראות עיבוד (לדוגמה: 'הגבר את העוצמה', 'חתוך את ה-10 שניות הראשונות', 'הוסף באס')..."
-                            : "שאל שאלה על עיבוד אודיו או העלה קובץ לעיבוד..."
+                            ? "💡 כתוב הוראות עיבוד: 'הגבר את העוצמה ב-30%', 'הפחת רעש', 'חתוך את ההתחלה'..."
+                            : "💬 שאל שאלה על עיבוד אודיו או העלה קובץ + הוראות עיבוד..."
                           }
                           className={`flex-1 resize-none rounded-xl border-2 focus:border-purple-500 transition-colors ${
                             theme === 'dark' 
