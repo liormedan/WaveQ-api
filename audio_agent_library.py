@@ -90,6 +90,16 @@ class AudioAgent:
                     "change to C major"
                 ]
             },
+            "time_stretch_torch": {
+                "aliases": ["time stretch", "stretch", "tempo stretch"],
+                "description": "Time stretch audio using torchaudio",
+                "parameters": ["rate"],
+                "examples": [
+                    "time stretch by 1.5x",
+                    "stretch to half speed",
+                    "tempo stretch using torch"
+                ]
+            },
             "add_reverb": {
                 "aliases": ["reverb", "echo", "room", "space"],
                 "description": "Add reverb effect",
@@ -268,7 +278,19 @@ class AudioAgent:
                     parameters["speed_factor"] = 0.8
                 else:
                     parameters["speed_factor"] = 1.0
-        
+
+        elif operation == "time_stretch_torch":
+            ratio_match = re.search(self.patterns["ratio"], text)
+            if ratio_match:
+                parameters["rate"] = float(ratio_match.group(1))
+            else:
+                if "half" in text:
+                    parameters["rate"] = 0.5
+                elif "double" in text or "twice" in text:
+                    parameters["rate"] = 2.0
+                else:
+                    parameters["rate"] = 1.0
+
         elif operation == "change_pitch":
             # Extract semitones
             semitone_match = re.search(self.patterns["semitone"], text)
@@ -323,6 +345,7 @@ class AudioAgent:
             "trim",            # Then trim
             "fade_in",         # Then fades
             "fade_out",
+            "time_stretch_torch",  # Torchaudio time stretch
             "change_speed",    # Then speed/pitch changes
             "change_pitch",
             "add_reverb",      # Then effects

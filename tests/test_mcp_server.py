@@ -11,6 +11,31 @@ from pathlib import Path
 # Provide a minimal stub for asyncio_mqtt to allow importing the server
 sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
 
+# Provide a minimal stub for torchaudio to avoid heavy dependency
+ta = types.ModuleType("torchaudio")
+
+def _load(path):
+    data, sr = sf.read(path)
+    if data.ndim == 1:
+        data = data[None, :]
+    return data, sr
+
+def _save(path, waveform, sr):
+    sf.write(path, waveform.T, sr)
+
+class _SoxEffects:
+    @staticmethod
+    def apply_effects_tensor(waveform, sr, effects):
+        rate = float(effects[0][1]) if effects else 1.0
+        import librosa
+        stretched = librosa.effects.time_stretch(waveform[0], rate=rate)
+        return stretched[None, :], sr
+
+ta.load = _load
+ta.save = _save
+ta.sox_effects = _SoxEffects()
+sys.modules.setdefault("torchaudio", ta)
+
 # Ensure the project root is on the path when running tests directly
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
@@ -41,6 +66,7 @@ def sample_wav(tmp_path):
         ("noise_reduction", {"strength": 0.1}),
         ("equalize_audio", {"low_gain": 1.0, "mid_gain": 1.0, "high_gain": 1.0}),
         ("compress_audio", {"threshold": -20}),
+        ("torch_time_stretch", {"rate": 1.2}),
     ],
 )
 def test_audio_operations(sample_wav, operation, params):
