@@ -15,46 +15,97 @@ interface ExportedFile {
   size: number
   downloadUrl: string
   operations: string[]
+  status: string
 }
 
 // ExportsSection Component
 function ExportsSection({ theme }: { theme: 'dark' | 'light' }) {
   const [exportedFiles, setExportedFiles] = useState<ExportedFile[]>([])
 
-  // Load exported files from localStorage
+  const saveToCache = (files: ExportedFile[]) => {
+    const serialized = files.map(f => ({ ...f, processedAt: f.processedAt.toISOString() }))
+    localStorage.setItem('WAVEQ_EXPORTED_FILES', JSON.stringify(serialized))
+  }
+
   useEffect(() => {
-    const loadExportedFiles = () => {
+    const loadFromCache = () => {
       const stored = localStorage.getItem('WAVEQ_EXPORTED_FILES')
       if (stored) {
         try {
           const parsed = JSON.parse(stored)
-          const filesWithDates = parsed.map((file: any) => ({
+          const withDates = parsed.map((file: any) => ({
             ...file,
             processedAt: new Date(file.processedAt)
           }))
-          setExportedFiles(filesWithDates)
+          setExportedFiles(withDates)
         } catch (error) {
-          console.error('Error loading exported files:', error)
+          console.error('Error loading cached exports:', error)
           setExportedFiles([])
         }
       }
     }
 
-    loadExportedFiles()
-    
-    // Listen for new exports
-    const handleStorageChange = () => {
-      loadExportedFiles()
+    const fetchRequests = async () => {
+      try {
+        const res = await fetch('/api/audio/requests?status=completed')
+        if (!res.ok) throw new Error('Failed to fetch requests')
+        const data = await res.json()
+        const requests = data.requests || []
+
+        const files: ExportedFile[] = await Promise.all(
+          requests.map(async (req: any) => {
+            let operations: string[] = []
+            let processedAt = req.submitted_at ? new Date(req.submitted_at) : new Date()
+            let size = 0
+            try {
+              const statusRes = await fetch(`/api/audio/status/${req.request_id}`)
+              if (statusRes.ok) {
+                const statusData = await statusRes.json()
+                operations =
+                  statusData.result?.operations?.map((op: any) => op.operation || op) || []
+                processedAt = statusData.timestamp
+                  ? new Date(statusData.timestamp)
+                  : processedAt
+                size = statusData.result?.file_size || size
+              }
+            } catch (err) {
+              console.error('Error loading request details:', err)
+            }
+
+            const name = req.file_path ? req.file_path.split('/').pop() : `request_${req.request_id}`
+            return {
+              id: req.request_id,
+              name,
+              originalName: name,
+              processedAt,
+              size,
+              downloadUrl: `/api/audio/download/${req.request_id}`,
+              operations,
+              status: req.status || 'unknown'
+            }
+          })
+        )
+
+        setExportedFiles(files)
+        saveToCache(files)
+      } catch (error) {
+        console.error('Error fetching exported files:', error)
+      }
     }
-    
-    window.addEventListener('storage', handleStorageChange)
-    return () => window.removeEventListener('storage', handleStorageChange)
+
+    loadFromCache()
+    fetchRequests()
   }, [])
 
-  const handleDeleteFile = (fileId: string) => {
+  const handleDeleteFile = async (fileId: string) => {
+    try {
+      await fetch(`/api/audio/requests/${fileId}`, { method: 'DELETE' })
+    } catch (error) {
+      console.error('Error deleting request:', error)
+    }
     const updatedFiles = exportedFiles.filter(file => file.id !== fileId)
     setExportedFiles(updatedFiles)
-    localStorage.setItem('WAVEQ_EXPORTED_FILES', JSON.stringify(updatedFiles))
+    saveToCache(updatedFiles)
   }
 
   const formatFileSize = (bytes: number) => {
@@ -132,6 +183,11 @@ function ExportsSection({ theme }: { theme: 'dark' | 'light' }) {
                   }`}>
                     {formatFileSize(file.size)}
                   </div>
+                </div>
+                <div className={`mt-2 text-sm ${
+                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  סטטוס: {file.status}
                 </div>
                 {file.operations.length > 0 && (
                   <div className="mt-2">

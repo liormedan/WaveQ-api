@@ -25,12 +25,16 @@ def client(tmp_path, monkeypatch):
 
 
 def test_audio_edit_success(client):
-    payload = {
-        "file_path": "test.wav",
-        "operations": [{"operation": "trim", "parameters": {}}],
-        "client_id": "tester",
-    }
-    response = client.post("/api/audio/edit", json=payload)
+    audio = io.BytesIO(b"test audio")
+    response = client.post(
+        "/api/audio/edit",
+        data={
+            "operation": "trim",
+            "parameters": "{}",
+            "client_id": "tester",
+        },
+        files={"audio_file": ("test.wav", audio, "audio/wav")},
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "submitted"
@@ -38,19 +42,23 @@ def test_audio_edit_success(client):
 
 
 def test_audio_edit_invalid_operation(client):
-    payload = {
-        "file_path": "test.wav",
-        "operations": "not-a-list",
-    }
-    response = client.post("/api/audio/edit", json=payload)
-    assert response.status_code == 422
+    audio = io.BytesIO(b"test audio")
+    response = client.post(
+        "/api/audio/edit",
+        data={"operation": "unknown", "parameters": "{}"},
+        files={"audio_file": ("test.wav", audio, "audio/wav")},
+    )
+    assert response.status_code == 400
 
 
 def test_audio_edit_bad_json(client):
+    audio = io.BytesIO(b"test audio")
     response = client.post(
-        "/api/audio/edit", data="{bad json}", headers={"content-type": "application/json"}
+        "/api/audio/edit",
+        data={"operation": "trim", "parameters": "{bad json}"},
+        files={"audio_file": ("test.wav", audio, "audio/wav")},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_llm_chat_success(client, monkeypatch):
@@ -82,3 +90,34 @@ def test_llm_chat_unavailable(client, monkeypatch):
     payload = {"messages": [{"role": "user", "content": "trim"}]}
     response = client.post("/api/llm/chat", json=payload)
     assert response.status_code == 503
+
+
+def test_chat_audio_success(client, monkeypatch):
+    def fake_parse(text):
+        return {"success": True, "data": {"operation": "trim", "parameters": {}}}
+
+    monkeypatch.setattr(api_gateway, "llm_parse_request", fake_parse)
+    audio = io.BytesIO(b"test audio")
+    response = client.post(
+        "/api/chat/audio",
+        data={"message": "trim this audio"},
+        files={"audio_file": ("test.wav", audio, "audio/wav")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "submitted"
+    assert "request_id" in body
+
+
+def test_chat_audio_llm_error(client, monkeypatch):
+    def fake_parse(text):
+        return {"success": False, "error": "bad"}
+
+    monkeypatch.setattr(api_gateway, "llm_parse_request", fake_parse)
+    audio = io.BytesIO(b"test audio")
+    response = client.post(
+        "/api/chat/audio",
+        data={"message": "trim"},
+        files={"audio_file": ("test.wav", audio, "audio/wav")},
+    )
+    assert response.status_code == 502
