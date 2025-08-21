@@ -41,6 +41,7 @@ def sample_wav(tmp_path):
         ("noise_reduction", {"strength": 0.1}),
         ("equalize_audio", {"low_gain": 1.0, "mid_gain": 1.0, "high_gain": 1.0}),
         ("compress_audio", {"threshold": -20}),
+        ("voice_activity_detection", {"remove_silence": True}),
     ],
 )
 def test_audio_operations(sample_wav, operation, params):

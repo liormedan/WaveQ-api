@@ -586,6 +586,13 @@ async def get_supported_operations():
                 "release": {"type": "float", "description": "Release time in seconds", "default": 0.1}
             }
         },
+        "voice_activity_detection": {
+            "description": "Detect speech segments or remove silence",
+            "parameters": {
+                "remove_silence": {"type": "boolean", "description": "Remove silent sections", "default": False},
+                "aggressiveness": {"type": "integer", "description": "VAD aggressiveness (0-3)", "default": 2},
+            }
+        },
         "merge": {
             "description": "Merge multiple audio files",
             "parameters": {
