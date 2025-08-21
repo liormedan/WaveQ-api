@@ -17,6 +17,7 @@ interface ChatMessage {
   timestamp: Date
   audioFile?: string
   downloadUrl?: string
+  code?: string
   originalAudioFile?: File
   showVisualization?: boolean
   status?: 'uploaded' | 'processed' | 'error'
@@ -37,9 +38,10 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
     if (savedMessages) {
       try {
         const parsedMessages = JSON.parse(savedMessages)
-        // Convert timestamp strings back to Date objects
+        // Convert timestamp strings back to Date objects and include code
         const messagesWithDates = parsedMessages.map((msg: any) => ({
           ...msg,
+          code: msg.code,
           timestamp: new Date(msg.timestamp)
         }))
         setMessages(messagesWithDates)
@@ -291,6 +293,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
   const saveMessagesToStorage = (messagesToSave: ChatMessage[]) => {
     const messagesForStorage = messagesToSave.map(msg => ({
       ...msg,
+      code: msg.code,
       originalAudioFile: undefined // Remove File objects before saving
     }))
     localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(messagesForStorage))
@@ -599,7 +602,8 @@ ${audioAnalysis.quickActions}
           id: (Date.now() + 1).toString(),
           text: data.message,
           sender: 'assistant',
-          timestamp: new Date()
+          timestamp: new Date(),
+          code: data.code
         }
         const updatedMessagesWithAI = [...updatedMessages, aiResponse]
         setMessages(updatedMessagesWithAI)
@@ -759,15 +763,20 @@ ${audioAnalysis.quickActions}
                         )}
                       </div>
                     )}
-                     <p 
+                     <p
                        className="whitespace-pre-wrap leading-relaxed"
-                       style={{ 
+                       style={{
                          textAlign: detectLanguage(message.text) === 'rtl' ? 'right' : 'left',
                          direction: detectLanguage(message.text)
                        }}
                      >
                        {message.text}
                      </p>
+                     {message.code && (
+                       <pre className="mt-3 p-3 rounded-lg bg-black/10 overflow-x-auto text-left" style={{ direction: 'ltr' }}>
+                         <code>{message.code}</code>
+                       </pre>
+                     )}
                      {message.downloadUrl && (
                        <div className="mt-3">
                          <a
