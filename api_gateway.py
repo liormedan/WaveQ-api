@@ -418,8 +418,25 @@ async def llm_chat(request: ChatRequest):
             "client_id": request.client_id,
         },
     )
+    try:
+        result = await parse_request(payload)
+    except HTTPException as exc:
+        await update_request(
+            request_id,
+            status="failed",
+            result={"error": exc.detail},
+        )
+        raise
+    except Exception as exc:
+        await update_request(
+            request_id,
+            status="failed",
+            result={"error": str(exc)},
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Error processing request: {exc}"
+        ) from exc
 
-    result = await parse_request(payload)
     await update_request(request_id, status="completed", result=result)
 
     return {"request_id": request_id, "response": result}
@@ -605,10 +622,12 @@ async def get_supported_operations():
             }
         },
         "convert_format": {
-            "description": "Convert audio to different format",
+            "description": "Convert audio to different format with optional bitrate, sample rate and channels",
             "parameters": {
                 "target_format": {"type": "string", "description": "Target audio format", "default": "mp3"},
-                "quality": {"type": "string", "description": "Audio quality", "default": "high", "options": ["low", "medium", "high"]}
+                "bitrate": {"type": "string", "description": "Audio bitrate e.g. '128k'", "default": "192k"},
+                "sample_rate": {"type": "int", "description": "Sample rate in Hz", "default": 44100},
+                "channels": {"type": "int", "description": "Number of audio channels", "default": 2},
             }
         }
     }

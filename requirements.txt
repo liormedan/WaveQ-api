@@ -12,6 +12,7 @@ torchaudio>=2.1.0
 soundfile>=0.12.1
 numpy>=1.26.0
 scipy>=1.11.0
+ffmpeg-python>=0.2.0
 
 # MQTT communication
 paho-mqtt>=1.6.1
