@@ -17,10 +17,12 @@ from datetime import datetime, timedelta
 import json
 from typing import List, Optional
 import uuid
+import asyncio
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import Base, engine, get_db, SessionLocal
 from models import AudioEditRequest
+from safe_executor import execute_python
 
 app = FastAPI(title="WaveQ Audio API Manager", version="1.0.0")
 
@@ -375,6 +377,23 @@ async def get_stats(db: Session = Depends(get_db)):
         "avg_processing_time": round(avg_processing_time, 2),
         "success_rate": round((completed_requests / total_requests * 100) if total_requests > 0 else 0, 1)
     }
+
+
+# Code execution with resource limits
+class CodeExecRequest(BaseModel):
+    language: str = "python"
+    code: str
+
+
+@app.post("/api/execute")
+async def execute_code(request: CodeExecRequest):
+    if request.language.lower() != "python":
+        raise HTTPException(status_code=400, detail="Unsupported language")
+    try:
+        stdout, stderr = await asyncio.to_thread(execute_python, request.code)
+        return {"stdout": stdout, "stderr": stderr}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # Background task to simulate audio processing
 async def process_audio_request(request_id: str):

@@ -30,6 +30,7 @@
 - ✅ Error Handling מאובטח
 - ✅ Request/Response logging
 - ✅ Database connection security
+- ✅ Sandbox להרצת קוד עם מגבלות זמן וזיכרון וסינון קלט
 
 ---
 

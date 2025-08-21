@@ -45,6 +45,7 @@ n8n Workflow →
 
 5. **Chat UI** (`waveq-chat-ui/`)
    - ממשק Next.js לתקשורת עם המערכת
+   - כולל רכיב `CodeCanvas` להרצת קוד עם העתקה, ניקוי ובחירת שפה תחת מגבלות זמן ומשאבים
 
 ## 🎵 פעולות עריכת אודיו נתמכות
 
@@ -415,4 +416,12 @@ curl -X POST http://localhost:8002/api/audio/edit \
   -F "operation=trim" \
   -F "parameters={\"start\": 0, \"end\": 5}" \
   -F "client_id=tester"
+```
+
+### הרצת קוד מאובטח
+
+```bash
+curl -X POST http://localhost:8001/api/execute \
+  -H "Content-Type: application/json" \
+  -d '{"language":"python","code":"print(42)"}'
 ```

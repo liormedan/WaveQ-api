@@ -1,36 +1,67 @@
 'use client'
 
-import Editor from '@monaco-editor/react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-interface CodeCanvasProps {
-  code: string
-  language: string
-  onChange: (value: string | undefined) => void
-  title?: string
-}
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Copy, Trash2 } from 'lucide-react'
 
-export function CodeCanvas({ code, language, onChange, title }: CodeCanvasProps) {
+const LANGUAGES = ['python', 'javascript', 'bash']
+
+export function CodeCanvas() {
+  const [code, setCode] = useState('')
+  const [language, setLanguage] = useState('python')
+
+  const handleCopy = async () => {
+    if (code.trim()) {
+      await navigator.clipboard.writeText(code)
+    }
+  }
+
+  const handleClear = () => setCode('')
+
   return (
-    <Card className="w-full h-full">
-      {title && (
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-        </CardHeader>
-      )}
-      <CardContent className="p-0">
-        <Editor
-          height="400px"
-          defaultLanguage={language}
-          language={language}
-          value={code}
-          theme="vs-dark"
-          options={{ minimap: { enabled: false }, fontSize: 14 }}
-          onChange={onChange}
-        />
-      </CardContent>
-    </Card>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <select
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+          className="border rounded px-2 py-1 text-sm"
+        >
+          {LANGUAGES.map((lang) => (
+            <option key={lang} value={lang}>
+              {lang}
+            </option>
+          ))}
+        </select>
+        <div className="space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCopy}
+            disabled={!code.trim()}
+          >
+            <Copy className="w-4 h-4 mr-1" />
+            Copy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClear}
+            disabled={!code}
+          >
+            <Trash2 className="w-4 h-4 mr-1" />
+            Clear
+          </Button>
+        </div>
+      </div>
+      <Textarea
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        placeholder="Write code here..."
+        className="font-mono h-48"
+      />
+    </div>
   )
 }
 
-export default CodeCanvas
