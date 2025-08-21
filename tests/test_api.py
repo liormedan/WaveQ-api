@@ -121,3 +121,26 @@ def test_chat_audio_llm_error(client, monkeypatch):
         files={"audio_file": ("test.wav", audio, "audio/wav")},
     )
     assert response.status_code == 502
+
+
+def test_run_code_success(client):
+    payload = {"language": "python", "code": "print('hi')"}
+    response = client.post("/api/run-code", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["output"].strip() == "hi"
+    assert body["errors"] == ""
+
+
+def test_run_code_error(client):
+    payload = {"language": "python", "code": "raise ValueError('bad')"}
+    response = client.post("/api/run-code", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert "ValueError" in body["errors"]
+
+
+def test_run_code_invalid_language(client):
+    payload = {"language": "javascript", "code": "console.log('hi')"}
+    response = client.post("/api/run-code", json=payload)
+    assert response.status_code == 400
