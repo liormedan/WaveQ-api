@@ -6,8 +6,8 @@ services:
     image: eclipse-mosquitto:2.0
     container_name: waveq-mqtt
     ports:
-      - "1883:1883"
-      - "9001:9001"
+      - "1883:1883"  # MQTT TCP
+      - "9001:9001"  # MQTT over WebSocket for external clients
     volumes:
       - ./mqtt-config:/mosquitto/config
       - ./mqtt-data:/mosquitto/data
@@ -25,6 +25,7 @@ services:
     environment:
       - MCP_MQTT_BROKER=mqtt-broker
       - MCP_MQTT_PORT=1883
+      - MCP_MQTT_WS_PORT=9001
     volumes:
       - ./audio-files:/app/audio-files
       - ./logs:/app/logs
@@ -46,6 +47,7 @@ services:
     environment:
       - MCP_MQTT_BROKER=mqtt-broker
       - MCP_MQTT_PORT=1883
+      - MCP_MQTT_WS_PORT=9001
     volumes:
       - ./uploads:/app/uploads
       - ./processed:/app/processed

@@ -37,6 +37,9 @@ ta.save = _save
 ta.sox_effects = _SoxEffects()
 sys.modules.setdefault("torchaudio", ta)
 
+# Stub ffmpeg module to avoid dependency during tests
+sys.modules.setdefault("ffmpeg", types.ModuleType("ffmpeg"))
+
 
 # Ensure the project root is on the path when running tests directly
 ROOT = Path(__file__).resolve().parents[1]
@@ -101,6 +104,10 @@ def test_split_audio(sample_wav):
         assert os.path.exists(path)
 
 
+@pytest.mark.skipif(
+    not hasattr(sys.modules["ffmpeg"], "input"),
+    reason="ffmpeg not available for format conversion",
+)
 def test_convert_format(sample_wav):
     server = AudioProcessingMCP()
     result = asyncio.run(server.convert_format(sample_wav, {"target_format": "wav"}))
