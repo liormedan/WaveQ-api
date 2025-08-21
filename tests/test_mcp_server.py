@@ -38,6 +38,9 @@ ta.save = _save
 ta.sox_effects = _SoxEffects()
 sys.modules.setdefault("torchaudio", ta)
 
+# Stub ffmpeg module to avoid dependency during tests
+sys.modules.setdefault("ffmpeg", types.ModuleType("ffmpeg"))
+
 
 # Provide a minimal stub for ffmpeg-python
 ff = types.ModuleType("ffmpeg")
@@ -145,6 +148,7 @@ def test_split_audio(sample_wav):
         assert os.path.exists(path)
 
 
+
 def test_split_large_segment(sample_wav):
     server = AudioProcessingMCP()
     result = asyncio.run(server.split_audio(sample_wav, {"segment_duration": 10}))
@@ -155,6 +159,7 @@ def test_split_invalid_duration(sample_wav):
     server = AudioProcessingMCP()
     with pytest.raises(ValueError):
         asyncio.run(server.split_audio(sample_wav, {"segment_duration": 0}))
+
 
 
 def test_convert_format(sample_wav):

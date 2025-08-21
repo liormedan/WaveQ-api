@@ -102,6 +102,20 @@ pip install -r requirements.txt
 # הפעלת MQTT Broker (Mosquitto)
 # התקן Mosquitto או השתמש ב-Docker
 
+# ברירת המחדל של המערכת חושפת גם חיבור MQTT רגיל (1883)
+# וגם חיבור WebSocket (9001) ללקוחות חיצוניים כגון ה-Chat UI.
+# ניתן לבדוק את החיבור באמצעות הסקריפט הבא:
+
+```bash
+python - <<'PY'
+import paho.mqtt.client as mqtt
+client = mqtt.Client(transport="websockets")
+client.connect("localhost", 9001)
+client.disconnect()
+print("WebSocket connection to Mosquitto succeeded")
+PY
+```
+
 # הפעלת MCP Server
 python mcp_audio_server.py
 
@@ -115,6 +129,8 @@ python main.py
 cd waveq-chat-ui
 npm install
 npm run dev
+
+# ברירת המחדל של ה-Chat UI מתחברת ל-broker דרך WebSocket בכתובת `ws://localhost:9001`.
 ```
 
 ## 📡 שימוש עם n8n
@@ -172,6 +188,11 @@ GET /api/audio/operations
 ### הגדרות MQTT:
 
 הקובץ `mqtt-config/mosquitto.conf` מכיל את כל הגדרות ה-MQTT Broker.
+הערכים הבאים בקובץ הסביבה (`config.env`) מגדירים את פרטי החיבור:
+
+- `MCP_MQTT_BROKER` – שם ה-host של ה-broker
+- `MCP_MQTT_PORT` – פורט MQTT רגיל (ברירת מחדל 1883)
+- `MCP_MQTT_WS_PORT` – פורט WebSocket ללקוחות חיצוניים (ברירת מחדל 9001)
 
 ## 📊 ניטור וניהול
 
