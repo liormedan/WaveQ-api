@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException, Depends, Header, status, File, UploadFile, Form
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +13,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 import sys
+import logging  # added
+
 from sqlalchemy.orm import Session
 
 import database
@@ -29,11 +30,16 @@ from models import APIRequest
 from dotenv import load_dotenv
 from llm_service import parse_request as llm_parse_request
 
+# Optional deps
 try:
     import redis.asyncio as redis
-except ImportError:  # pragma: no cover - redis is optional
+except ImportError:  # redis is optional
     redis = None
 
+try:
+    import aiomqtt  # added: MQTT async client
+except ImportError:
+    aiomqtt = None
 
 # Load environment variables
 load_dotenv("config.env", override=True)
@@ -43,7 +49,6 @@ API_KEY_REQUIRED = os.getenv("API_KEY_REQUIRED", "false").lower() == "true"
 API_KEY_HEADER = os.getenv("API_KEY_HEADER", "X-API-Key")
 API_KEY = os.getenv("API_KEY", "")
 
-
 async def verify_api_key(api_key: str = Header(None, alias=API_KEY_HEADER)):
     if not API_KEY_REQUIRED:
         return
@@ -52,9 +57,6 @@ async def verify_api_key(api_key: str = Header(None, alias=API_KEY_HEADER)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",
         )
-
-
-
 
 app = FastAPI(
     title="WaveQ Audio API Gateway",
@@ -72,6 +74,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('api_gateway.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Configuration
 MCP_MQTT_BROKER = os.getenv("MCP_MQTT_BROKER", "localhost")
 MCP_MQTT_PORT = int(os.getenv("MCP_MQTT_PORT", "1883"))
@@ -88,11 +101,12 @@ if redis:
 else:
     redis_client = None
 
+# =========================
 # Request models
+# =========================
 class AudioOperation(BaseModel):
     operation: str
     parameters: Dict[str, Any] = {}
-
 
 class AudioEditRequest(BaseModel):
     file_path: str
@@ -101,7 +115,6 @@ class AudioEditRequest(BaseModel):
     priority: Optional[str] = "normal"
     description: Optional[str] = ""
 
-
 class AudioEditUploadRequest(BaseModel):
     operation: str
     parameters: Dict[str, Any]
@@ -109,14 +122,12 @@ class AudioEditUploadRequest(BaseModel):
     priority: Optional[str] = "normal"
     description: Optional[str] = ""
 
-
 class AudioEditResponse(BaseModel):
     request_id: str
     status: str
     message: str
     timestamp: str
     estimated_completion: Optional[str] = None
-
 
 class ProcessingStatus(BaseModel):
     request_id: str
@@ -126,30 +137,23 @@ class ProcessingStatus(BaseModel):
     result: Optional[Dict[str, Any]] = None
     timestamp: str
 
-
 class ChatRequest(BaseModel):
     messages: List[Dict[str, Any]]
     client_id: Optional[str] = None
-
 
 class CodeRunRequest(BaseModel):
     language: str
     code: str
 
-
 class CodeRunResponse(BaseModel):
     output: str
     errors: str
 
-
+# =========================
+# Helpers
+# =========================
 async def parse_request(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Parse chat request payload using the LLM service.
-
-    Extracts the latest message content and forwards it to the LLM parser.
-    Returns the parsed command dictionary on success.
-    Raises HTTPException on errors or malformed responses.
-    """
-
+    """Parse chat request payload using the LLM service."""
     messages = payload.get("messages", [])
     if not messages:
         raise HTTPException(status_code=400, detail="No messages provided")
@@ -168,7 +172,6 @@ async def parse_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=502, detail=f"Invalid response from LLM: {error_msg}")
 
     return result["data"]
-
 
 def _execute_python(code: str) -> Tuple[str, str]:
     """Execute Python code in a temporary file and return output and errors."""
@@ -191,16 +194,22 @@ def _execute_python(code: str) -> Tuple[str, str]:
         except OSError:
             pass
 
+# =========================
 # MQTT Client for MCP communication
+# =========================
 class MCPClient:
     def __init__(self):
         self.client = None
         self.client_id = f"api_gateway_{uuid.uuid4().hex[:8]}"
         self.connected = False
         self.status_task = None
-    
+
     async def connect(self):
         """Connect to MQTT broker"""
+        if aiomqtt is None:
+            logger.error("aiomqtt is not installed; cannot connect to MQTT.")
+            self.connected = False
+            return
         try:
             self.client = aiomqtt.Client(
                 hostname=MCP_MQTT_BROKER,
@@ -213,11 +222,13 @@ class MCPClient:
             await self.client.subscribe("audio/status/#")
             # Start background listener for status messages
             self.status_task = asyncio.create_task(self.listen_status_updates())
-            print(f"Connected to MQTT broker at {MCP_MQTT_BROKER}:{MCP_MQTT_PORT}")
+            logger.info(
+                f"Connected to MQTT broker at {MCP_MQTT_BROKER}:{MCP_MQTT_PORT}"
+            )
         except Exception as e:
-            print(f"Failed to connect to MQTT broker: {e}")
+            logger.error(f"Failed to connect to MQTT broker: {e}")
             self.connected = False
-    
+
     async def disconnect(self):
         """Disconnect from MQTT broker"""
         if self.client and self.connected:
@@ -225,28 +236,31 @@ class MCPClient:
                 self.status_task.cancel()
             await self.client.disconnect()
             self.connected = False
-    
+            logger.info("Disconnected from MQTT broker")
+
     async def publish_request(self, request_id: str, payload: Dict[str, Any]):
         """Publish audio processing request to MCP server"""
         if not self.connected:
             await self.connect()
-        
         if self.connected:
-            # Publish to shared audio edit topic
             topic = "audio/edit"
-            await self.client.publish(topic, json.dumps(payload))
-            return True
+            try:
+                await self.client.publish(topic, json.dumps(payload))
+                return True
+            except Exception as e:
+                logger.error(f"MQTT publish failed: {e}")
         return False
 
     async def subscribe_to_status(self, request_id: str):
         """Subscribe to status updates for a specific request"""
-        # Subscription handled globally in connect()
         if not self.connected:
             await self.connect()
         return self.connected
 
     async def listen_status_updates(self):
         """Background task to listen for status updates"""
+        if not self.client:
+            return
         try:
             async with self.client.messages() as messages:
                 async for message in messages:
@@ -255,25 +269,59 @@ class MCPClient:
                         continue
                     try:
                         payload = json.loads(message.payload.decode())
-                        request_id = payload.get("request_id")
-                        if request_id:
+                        req_id = payload.get("request_id")
+                        if req_id:
                             with database.SessionLocal() as db:
                                 update_request_status(
                                     db,
-                                    request_id,
+                                    req_id,
                                     status=payload.get("status", "unknown"),
                                     progress=payload.get("progress"),
                                     result=payload.get("result"),
                                 )
                     except Exception as e:
-                        print(f"Error processing status message: {e}")
+                        logger.error(f"Error processing status message: {e}")
         except asyncio.CancelledError:
             pass
+        except Exception as e:
+            logger.error(f"MQTT listen loop error: {e}")
 
 # Global MCP client
 mcp_client = MCPClient()
 
+# =========================
+# In-memory / Redis request cache
+# =========================
+active_requests: Dict[str, Dict[str, Any]] = {}
 
+async def save_request(request_id: str, data: Dict[str, Any]):
+    """Save request data to memory and Redis if available"""
+    active_requests[request_id] = data
+    if redis_client:
+        try:
+            await redis_client.set(f"request:{request_id}", json.dumps(data))
+        except Exception as e:
+            logger.error(f"Redis save error: {e}")
+
+async def get_request(request_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve request data from Redis or memory"""
+    if redis_client:
+        try:
+            stored = await redis_client.get(f"request:{request_id}")
+            if stored:
+                return json.loads(stored)
+        except Exception as e:
+            logger.error(f"Redis get error: {e}")
+    return active_requests.get(request_id)
+
+async def update_request(request_id: str, **fields):
+    data = await get_request(request_id) or {}
+    data.update(fields)
+    await save_request(request_id, data)
+
+# =========================
+# Lifecycle
+# =========================
 @app.on_event("startup")
 async def startup_event():
     """Initialize MCP client on startup"""
@@ -285,6 +333,9 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     await mcp_client.disconnect()
 
+# =========================
+# Routes
+# =========================
 @app.post("/api/audio/edit", response_model=AudioEditResponse)
 async def submit_audio_edit(
     audio_file: UploadFile = File(...),
@@ -360,7 +411,6 @@ async def submit_audio_edit(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-
 @app.post("/api/chat/audio")
 async def chat_audio(
     message: str = Form(...),
@@ -426,7 +476,6 @@ async def chat_audio(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-
 @app.post("/api/llm/chat")
 async def llm_chat(request: ChatRequest, db: Session = Depends(get_db)):
     """Handle chat requests for LLM processing"""
@@ -461,24 +510,19 @@ async def llm_chat(request: ChatRequest, db: Session = Depends(get_db)):
         ) from exc
 
     update_request_status(db, request_id, status="completed", result=result)
-
     return {"request_id": request_id, "response": result}
-
 
 @app.post("/api/run-code", response_model=CodeRunResponse)
 async def run_code(request: CodeRunRequest):
     """Run small code snippets in a restricted subprocess."""
     if request.language.lower() != "python":
         raise HTTPException(status_code=400, detail="Unsupported language")
-
     if len(request.code) > 1000:
         raise HTTPException(status_code=400, detail="Code too long")
-
     try:
         stdout, stderr = await asyncio.to_thread(_execute_python, request.code)
     except subprocess.TimeoutExpired:
         return CodeRunResponse(output="", errors="Execution timed out")
-
     return CodeRunResponse(output=stdout, errors=stderr)
 
 @app.get("/api/audio/status/{request_id}", response_model=ProcessingStatus)
@@ -531,15 +575,15 @@ async def download_processed_audio(request_id: str, db: Session = Depends(get_db
     # Look for processed file
     original_file = Path(request_obj.file_path)
     processed_files = list(original_file.parent.glob(f"{original_file.stem}_*"))
-    
+
     if not processed_files:
         raise HTTPException(status_code=404, detail="Processed file not found")
-    
+
     # Return the most recent processed file
     latest_file = max(processed_files, key=lambda x: x.stat().st_mtime)
-    
+
     return FileResponse(
-        path=latest_file,
+        path=str(latest_file),
         filename=latest_file.name,
         media_type="audio/wav"
     )
@@ -556,8 +600,11 @@ async def cancel_request(request_id: str, db: Session = Depends(get_db)):
 
     update_request_status(db, request_id, status="cancelled")
 
-    if os.path.exists(request_obj.file_path or ""):
-        os.remove(request_obj.file_path)
+    if request_obj.file_path and os.path.exists(request_obj.file_path):
+        try:
+            os.remove(request_obj.file_path)
+        except OSError as e:
+            logger.warning(f"Failed to remove file {request_obj.file_path}: {e}")
 
     return {"message": "Request cancelled successfully", "request_id": request_id}
 
@@ -667,7 +714,6 @@ async def get_supported_operations():
             }
         }
     }
-    
     return {
         "operations": operations,
         "total_operations": len(operations)
@@ -694,7 +740,7 @@ async def monitor_mcp_status():
                 await mcp_client.connect()
             await asyncio.sleep(30)  # Check every 30 seconds
         except Exception as e:
-            print(f"Error monitoring MCP status: {e}")
+            logger.error(f"Error monitoring MCP status: {e}")
             await asyncio.sleep(60)  # Wait longer on error
 
 # Start monitoring task
@@ -708,5 +754,4 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8002"))
     debug = os.getenv("DEBUG", "false").lower() == "true"
-    
     uvicorn.run(app, host=host, port=port, log_level="info" if not debug else "debug")

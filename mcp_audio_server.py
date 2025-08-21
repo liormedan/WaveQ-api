@@ -17,6 +17,7 @@ import uuid
 from pydub import AudioSegment, effects
 import soundfile as sf
 import librosa
+import numpy as np
 
 
 import torchaudio
@@ -181,6 +182,18 @@ class AudioProcessingMCP:
         sf.write(out_path, reduced, sr)
         return {"output_path": str(out_path)}
 
+    async def augment_audio(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        noise_level = params.get("noise_level", 0.005)
+        pitch = params.get("pitch_shift", 0)
+        y, sr = librosa.load(file_path, sr=None)
+        noise = np.random.normal(0, noise_level, size=y.shape)
+        augmented = y + noise
+        if pitch:
+            augmented = librosa.effects.pitch_shift(augmented, sr=sr, n_steps=pitch)
+        out_path = self.processed_dir / f"augment_{Path(file_path).stem}.wav"
+        sf.write(out_path, augmented, sr)
+        return {"output_path": str(out_path)}
+
     async def equalize_audio(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         low_gain = params.get("low_gain", 0)
         mid_gain = params.get("mid_gain", 0)
@@ -303,6 +316,7 @@ class AudioProcessingMCP:
             "time_stretch_torch": self.torch_time_stretch,
             "reverb": self.add_reverb,
             "noise_reduction": self.noise_reduction,
+            "augment": self.augment_audio,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
 
@@ -343,6 +357,7 @@ class AudioProcessingMCP:
             "time_stretch_torch": self.torch_time_stretch,
             "reverb": self.add_reverb,
             "noise_reduction": self.noise_reduction,
+            "augment": self.augment_audio,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
 
