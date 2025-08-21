@@ -130,6 +130,24 @@ class AudioAgent:
                     "squash the peaks"
                 ]
             },
+            "augment": {
+                "aliases": [
+                    "augment",
+                    "augmentation",
+                    "randomize",
+                    "randomise",
+                    "add noise",
+                    "noise",
+                    "pitch shift"
+                ],
+                "description": "Apply random audio augmentations like noise and pitch shift",
+                "parameters": ["noise_level", "pitch_shift"],
+                "examples": [
+                    "augment with noise 5% and pitch up 2 semitones",
+                    "add noise and random pitch shift",
+                    "randomize the audio"
+                ]
+            },
             "merge": {
                 "aliases": ["combine", "join", "concatenate", "add"],
                 "description": "Merge multiple audio files",
@@ -287,7 +305,27 @@ class AudioAgent:
                 parameters["duration"] = float(time_match.group(1))
             else:
                 parameters["duration"] = 1.0  # Default 1 second
-        
+
+        elif operation == "augment":
+            perc_match = re.search(self.patterns["percentage"], text)
+            if perc_match:
+                parameters["noise_level"] = float(perc_match.group(1)) / 100.0
+            else:
+                noise_match = re.search(r"noise(?: level)?\s*(\d+(?:\.\d+)?)", text)
+                if noise_match:
+                    parameters["noise_level"] = float(noise_match.group(1))
+                else:
+                    parameters["noise_level"] = 0.02
+
+            semitone_match = re.search(self.patterns["semitone"], text)
+            if semitone_match:
+                steps = int(semitone_match.group(1))
+                if "lower" in text or "down" in text:
+                    steps = -steps
+                parameters["pitch_shift"] = steps
+            else:
+                parameters["pitch_shift"] = 0
+
         elif operation == "convert_format":
             # Extract format and quality
             format_match = re.search(self.patterns["format"], text)
@@ -326,6 +364,7 @@ class AudioAgent:
             "change_speed",    # Then speed/pitch changes
             "change_pitch",
             "add_reverb",      # Then effects
+            "augment",
             "split",           # Then structural changes
             "merge",
             "convert_format"   # Convert format last

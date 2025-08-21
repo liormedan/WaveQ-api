@@ -17,6 +17,7 @@ import uuid
 from pydub import AudioSegment, effects
 import soundfile as sf
 import librosa
+from audiomentations import Compose, AddGaussianNoise, PitchShift
 
 # Import our Audio Agent
 from audio_agent_library import AudioAgent
@@ -188,6 +189,19 @@ class AudioProcessingMCP:
         processed.export(out_path, format="wav")
         return {"output_path": str(out_path)}
 
+    async def augment_audio(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        noise_level = params.get("noise_level", 0.02)
+        pitch_shift = params.get("pitch_shift", 0)
+        samples, sample_rate = librosa.load(file_path, sr=None)
+        augment = Compose([
+            AddGaussianNoise(min_amplitude=0.0, max_amplitude=noise_level, p=0.5),
+            PitchShift(min_semitones=pitch_shift, max_semitones=pitch_shift, p=0.5),
+        ])
+        augmented = augment(samples=samples, sample_rate=sample_rate)
+        out_path = self.processed_dir / f"augment_{Path(file_path).stem}.wav"
+        sf.write(out_path, augmented, sample_rate)
+        return {"output_path": str(out_path)}
+
     async def merge_audio_files(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         files = [file_path] + params.get("additional_files", [])
         segments = [AudioSegment.from_file(p) for p in files]
@@ -229,6 +243,7 @@ class AudioProcessingMCP:
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
+            "augment": self.augment_audio,
         }
         for op in operations:
             name = op.get("name")
@@ -265,6 +280,7 @@ class AudioProcessingMCP:
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
+            "augment": self.augment_audio,
             "merge": self.merge_audio_files,
             "split": self.split_audio,
             "convert": self.convert_format,
