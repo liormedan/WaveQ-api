@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks, UploadFile, File, Depends
+from fastapi import FastAPI, Request, Form, HTTPException, BackgroundTasks, UploadFile, File, Depends, Response, Cookie
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from fastapi import status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import Base, engine, get_db, SessionLocal
 from models import AudioEditRequest
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 app = FastAPI(title="WaveQ Audio API Manager", version="1.0.0")
 
@@ -91,6 +94,73 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+# Authentication setup
+SECRET_KEY = os.getenv("AUTH_SECRET_KEY", "change_me")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class User(BaseModel):
+    username: str
+    disabled: Optional[bool] = None
+
+class UserInDB(User):
+    hashed_password: str
+
+fake_users_db = {
+    "admin": {
+        "username": "admin",
+        "hashed_password": pwd_context.hash("admin"),
+        "disabled": False,
+    }
+}
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_user(db, username: str):
+    user_dict = db.get(username)
+    if user_dict:
+        return UserInDB(**user_dict)
+
+def authenticate_user(db, username: str, password: str):
+    user = get_user(db, username)
+    if not user or not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+async def get_current_user(token: str = Depends(oauth2_scheme), token_cookie: str = Cookie(None)):
+    if not token:
+        token = token_cookie
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user = get_user(fake_users_db, username)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return user
+
+
+@app.exception_handler(HTTPException)
+async def auth_exception_handler(request: Request, exc: HTTPException):
+    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+        return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=exc.status_code)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+
 # Security: Input validation models
 class AudioEditRequestModel(BaseModel):
     client_name: str
@@ -138,17 +208,40 @@ async def dashboard(request: Request):
 async def requests_page(request: Request):
     return templates.TemplateResponse("requests.html", {"request": request})
 
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
+    access_token = create_access_token(data={"sub": user.username})
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="access_token", value=access_token, httponly=True)
+    return response
+
+
+@app.get("/logout")
+async def logout(response: Response):
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie("access_token")
+    return response
+
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_dashboard(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+async def admin_dashboard(request: Request, user: User = Depends(get_current_user)):
+    return templates.TemplateResponse("admin.html", {"request": request, "user": user})
 
 @app.get("/clients", response_class=HTMLResponse)
-async def clients_page(request: Request):
-    return templates.TemplateResponse("clients.html", {"request": request})
+async def clients_page(request: Request, user: User = Depends(get_current_user)):
+    return templates.TemplateResponse("clients.html", {"request": request, "user": user})
 
 @app.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {"request": request})
+async def settings_page(request: Request, user: User = Depends(get_current_user)):
+    return templates.TemplateResponse("settings.html", {"request": request, "user": user})
 
 @app.get("/analytics", response_class=HTMLResponse)
 async def analytics_page(request: Request):

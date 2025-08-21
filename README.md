@@ -86,6 +86,15 @@ docker-compose up -d
 # או השתמש בסקריפט הפעלה
 .\start_system.ps1
 ```
+### בניית והפעלת Web Dashboard עם Docker:
+
+```bash
+# בניית התמונה
+docker build -f Dockerfile.dashboard -t waveq-dashboard .
+
+# הפעלת הקונטיינר
+docker run -p 8001:8001 waveq-dashboard
+```
 
 ### התקנה ידנית:
 
