@@ -262,26 +262,36 @@ async def handle_chat(file: UploadFile = File(...), message: str = Form(...)):
 async def submit_audio_edit_request(
     request: Request,  # Required for rate limiting
     client_name: str = Form(...),
-    audio_file: str = Form(...),
+    audio_file: UploadFile = File(...),
     edit_type: str = Form(...),
     description: str = Form(...),
     priority: str = Form("normal"),
     db: Session = Depends(get_db)
 ):
     try:
+        upload_dir = "uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+        file_id = str(uuid.uuid4())
+        file_extension = os.path.splitext(audio_file.filename)[1] or ".wav"
+        file_path = os.path.join(upload_dir, f"{file_id}{file_extension}")
+
+        with open(file_path, "wb") as buffer:
+            content = await audio_file.read()
+            buffer.write(content)
+
         # Security: Input validation
         request_data = AudioEditRequestModel(
             client_name=client_name,
-            audio_file=audio_file,
+            audio_file=file_path,
             edit_type=edit_type,
             description=description,
             priority=priority
         )
-        
+
         # Security: Sanitize description
         sanitized_description = re.sub(r'<[^>]+>', '', description)  # Remove HTML tags
         sanitized_description = sanitized_description[:500]  # Limit length
-        
+
         new_request = AudioEditRequest(
             client_name=request_data.client_name,
             audio_file=request_data.audio_file,
