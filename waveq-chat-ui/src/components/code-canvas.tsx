@@ -1,5 +1,6 @@
 'use client'
 
+
 interface CodeCanvasProps {
   code: string
   theme?: 'dark' | 'light'
