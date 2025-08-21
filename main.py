@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, EmailStr, validator
 import uvicorn
 import os
 import logging
@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import Base, engine, get_db, SessionLocal
 from models import AudioEditRequest
+import crud
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -197,6 +198,41 @@ class AudioEditRequestModel(BaseModel):
             raise ValueError('Invalid priority level')
         return v
 
+class ClientBase(BaseModel):
+    name: str
+    email: EmailStr
+    status: str = "active"
+
+    @validator('status')
+    def validate_status(cls, v):
+        if v not in ['active', 'inactive', 'premium']:
+            raise ValueError('Invalid status')
+        return v
+
+
+class ClientCreate(ClientBase):
+    pass
+
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    status: Optional[str] = None
+
+    @validator('status')
+    def validate_status(cls, v):
+        if v not in ['active', 'inactive', 'premium']:
+            raise ValueError('Invalid status')
+        return v
+
+
+class ClientOut(ClientBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+
 # Database initialization
 Base.metadata.create_all(bind=engine)
 
@@ -238,6 +274,34 @@ async def admin_dashboard(request: Request, user: User = Depends(get_current_use
 @app.get("/clients", response_class=HTMLResponse)
 async def clients_page(request: Request, user: User = Depends(get_current_user)):
     return templates.TemplateResponse("clients.html", {"request": request, "user": user})
+
+
+@app.get("/api/clients", response_model=List[ClientOut])
+async def list_clients_api(db: Session = Depends(get_db)):
+    clients = crud.list_clients(db)
+    return [ClientOut.from_orm(c) for c in clients]
+
+
+@app.post("/api/clients", response_model=ClientOut)
+async def create_client_api(client: ClientCreate, db: Session = Depends(get_db)):
+    new_client = crud.create_client(db, **client.dict())
+    return ClientOut.from_orm(new_client)
+
+
+@app.put("/api/clients/{client_id}", response_model=ClientOut)
+async def update_client_api(client_id: int, client: ClientUpdate, db: Session = Depends(get_db)):
+    updated = crud.update_client(db, client_id, **client.dict(exclude_unset=True))
+    if not updated:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return ClientOut.from_orm(updated)
+
+
+@app.delete("/api/clients/{client_id}")
+async def delete_client_api(client_id: int, db: Session = Depends(get_db)):
+    deleted = crud.delete_client(db, client_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return {"success": True}
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, user: User = Depends(get_current_user)):

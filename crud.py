@@ -2,7 +2,7 @@ import json
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from models import APIRequest
+from models import APIRequest, Client
 
 
 def _dump(value):
@@ -65,4 +65,55 @@ def list_requests(
         stmt = stmt.filter_by(status=status)
     stmt = stmt.order_by(APIRequest.submitted_at.desc()).limit(limit)
     return list(db.scalars(stmt))
+
+
+def create_client(
+    db: Session,
+    name: str,
+    email: str,
+    status: str = "active",
+    phone: Optional[str] = None,
+    location: Optional[str] = None,
+):
+    client = Client(
+        name=name,
+        email=email,
+        status=status,
+        phone=phone,
+        location=location,
+    )
+    db.add(client)
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+def get_client(db: Session, client_id: int) -> Optional[Client]:
+    return db.get(Client, client_id)
+
+
+def list_clients(db: Session, skip: int = 0, limit: int = 100):
+    stmt = select(Client).offset(skip).limit(limit)
+    return list(db.scalars(stmt))
+
+
+def update_client(db: Session, client_id: int, **fields):
+    client = db.get(Client, client_id)
+    if not client:
+        return None
+    for key, value in fields.items():
+        if value is not None and hasattr(client, key):
+            setattr(client, key, value)
+    db.commit()
+    db.refresh(client)
+    return client
+
+
+def delete_client(db: Session, client_id: int) -> bool:
+    client = db.get(Client, client_id)
+    if not client:
+        return False
+    db.delete(client)
+    db.commit()
+    return True
 
