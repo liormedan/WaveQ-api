@@ -244,13 +244,13 @@ async def settings_page(request: Request, user: User = Depends(get_current_user)
     return templates.TemplateResponse("settings.html", {"request": request, "user": user})
 
 @app.get("/analytics", response_class=HTMLResponse)
-async def analytics_page(request: Request):
-    return templates.TemplateResponse("analytics.html", {"request": request})
+async def analytics_page(request: Request, user: User = Depends(get_current_user)):
+    return templates.TemplateResponse("analytics.html", {"request": request, "user": user})
 
 # Chat routes
 @app.get("/chat", response_class=HTMLResponse)
-async def chat_page(request: Request):
-    return templates.TemplateResponse("chat.html", {"request": request})
+async def chat_page(request: Request, user: User = Depends(get_current_user)):
+    return templates.TemplateResponse("chat.html", {"request": request, "user": user})
 
 @app.post("/chat")
 async def handle_chat(file: UploadFile = File(...), message: str = Form(...)):
