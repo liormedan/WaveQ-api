@@ -625,6 +625,12 @@ async def get_supported_operations():
                 "pitch_steps": {"type": "float", "description": "Pitch change in semitones", "default": 0}
             }
         },
+        "time_stretch_torch": {
+            "description": "Time stretch audio using torchaudio",
+            "parameters": {
+                "rate": {"type": "float", "description": "Stretch factor", "default": 1.0},
+            }
+        },
         "add_reverb": {
             "description": "Add reverb effect",
             "parameters": {

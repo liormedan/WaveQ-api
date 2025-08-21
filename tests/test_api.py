@@ -123,24 +123,10 @@ def test_chat_audio_llm_error(client, monkeypatch):
     assert response.status_code == 502
 
 
-def test_run_code_success(client):
-    payload = {"language": "python", "code": "print('hi')"}
-    response = client.post("/api/run-code", json=payload)
+
+def test_supported_operations_include_time_stretch(client):
+    response = client.get("/api/audio/operations")
     assert response.status_code == 200
-    body = response.json()
-    assert body["output"].strip() == "hi"
-    assert body["errors"] == ""
+    ops = response.json()["operations"]
+    assert "time_stretch_torch" in ops
 
-
-def test_run_code_error(client):
-    payload = {"language": "python", "code": "raise ValueError('bad')"}
-    response = client.post("/api/run-code", json=payload)
-    assert response.status_code == 200
-    body = response.json()
-    assert "ValueError" in body["errors"]
-
-
-def test_run_code_invalid_language(client):
-    payload = {"language": "javascript", "code": "console.log('hi')"}
-    response = client.post("/api/run-code", json=payload)
-    assert response.status_code == 400

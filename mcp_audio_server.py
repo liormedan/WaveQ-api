@@ -17,9 +17,10 @@ import uuid
 from pydub import AudioSegment, effects
 import soundfile as sf
 import librosa
-import webrtcvad
 
-from audiomentations import Compose, AddGaussianNoise, PitchShift
+
+import torchaudio
+
 
 
 # Import our Audio Agent
@@ -149,6 +150,15 @@ class AudioProcessingMCP:
         shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=steps)
         out_path = self.processed_dir / f"pitch_{Path(file_path).stem}.wav"
         sf.write(out_path, shifted, sr)
+        return {"output_path": str(out_path)}
+
+    async def torch_time_stretch(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        rate = params.get("rate", 1.0)
+        waveform, sr = torchaudio.load(file_path)
+        effects_chain = [["tempo", str(rate)]]
+        stretched, sr = torchaudio.sox_effects.apply_effects_tensor(waveform, sr, effects_chain)
+        out_path = self.processed_dir / f"stretch_{Path(file_path).stem}.wav"
+        torchaudio.save(str(out_path), stretched, sr)
         return {"output_path": str(out_path)}
 
     async def add_reverb(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -290,6 +300,7 @@ class AudioProcessingMCP:
             "fade_out": self.fade_out_audio,
             "speed": self.change_speed,
             "pitch": self.change_pitch,
+            "time_stretch_torch": self.torch_time_stretch,
             "reverb": self.add_reverb,
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
@@ -329,6 +340,7 @@ class AudioProcessingMCP:
             "fade_out": self.fade_out_audio,
             "speed": self.change_speed,
             "pitch": self.change_pitch,
+            "time_stretch_torch": self.torch_time_stretch,
             "reverb": self.add_reverb,
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,

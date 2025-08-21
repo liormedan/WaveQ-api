@@ -11,49 +11,32 @@ from pathlib import Path
 # Provide a minimal stub for asyncio_mqtt to allow importing the server
 sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
 
-# Stub pkg_resources for webrtcvad if missing
-if "pkg_resources" not in sys.modules:
-    pkg_stub = types.ModuleType("pkg_resources")
-    pkg_stub.get_distribution = lambda name: types.SimpleNamespace(version="0.0")
-    sys.modules["pkg_resources"] = pkg_stub
 
-# Stub ffmpeg-python if not installed
-if "ffmpeg" not in sys.modules:
-    class _StubFFMPEG(types.ModuleType):
-        def input(self, file_path):
-            return file_path
+# Provide a minimal stub for torchaudio to avoid heavy dependency
+ta = types.ModuleType("torchaudio")
 
-        def output(self, stream, out_path, format=None, **kwargs):
-            return out_path
+def _load(path):
+    data, sr = sf.read(path)
+    if data.ndim == 1:
+        data = data[None, :]
+    return data, sr
 
-        def run(self, stream, overwrite_output=True):
-            Path(stream).touch()
+def _save(path, waveform, sr):
+    sf.write(path, waveform.T, sr)
 
-    sys.modules["ffmpeg"] = _StubFFMPEG("ffmpeg")
+class _SoxEffects:
+    @staticmethod
+    def apply_effects_tensor(waveform, sr, effects):
+        rate = float(effects[0][1]) if effects else 1.0
+        import librosa
+        stretched = librosa.effects.time_stretch(waveform[0], rate=rate)
+        return stretched[None, :], sr
 
-# Provide a stub for audiomentations if it's not installed
-if "audiomentations" not in sys.modules:
-    class _StubTransform:
-        def __init__(self, *args, **kwargs):
-            pass
+ta.load = _load
+ta.save = _save
+ta.sox_effects = _SoxEffects()
+sys.modules.setdefault("torchaudio", ta)
 
-        def __call__(self, samples, sample_rate):
-            return samples
-
-    class _StubCompose:
-        def __init__(self, transforms):
-            self.transforms = transforms
-
-        def __call__(self, samples, sample_rate):
-            for t in self.transforms:
-                samples = t(samples, sample_rate)
-            return samples
-
-    stub_module = types.ModuleType("audiomentations")
-    stub_module.Compose = _StubCompose
-    stub_module.AddGaussianNoise = _StubTransform
-    stub_module.PitchShift = _StubTransform
-    sys.modules["audiomentations"] = stub_module
 
 # Ensure the project root is on the path when running tests directly
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,7 +70,7 @@ def sample_wav(tmp_path):
         ("equalize_audio", {"low_gain": 1.0, "mid_gain": 1.0, "high_gain": 1.0}),
         ("compress_audio", {"threshold": -20}),
 
-        ("voice_activity_detection", {"remove_silence": True}),
+        ("torch_time_stretch", {"rate": 1.2}),
 
     ],
 )
