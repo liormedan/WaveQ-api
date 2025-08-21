@@ -5,6 +5,7 @@ import { ChatInterface } from '@/components/chat-interface'
 import { Button } from '@/components/ui/button'
 import { Settings, Sun, Moon, Key, Bot, Download, FileText, Calendar, Clock, FileAudio, Trash2, Upload } from 'lucide-react'
 import { UploadsSection } from '@/components/uploads-section'
+import { useTranslation } from '@/components/language-provider'
 
 // Types for exported files
 interface ExportedFile {
@@ -238,6 +239,7 @@ function ExportsSection({ theme }: { theme: 'dark' | 'light' }) {
 }
 
 export default function Home() {
+  const { lang, setLang } = useTranslation()
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [currentPage, setCurrentPage] = useState<'chat' | 'settings' | 'exports' | 'uploads'>('chat')
   const [apiKey, setApiKey] = useState('')
@@ -680,8 +682,8 @@ export default function Home() {
                 variant="outline"
                 onClick={() => handleThemeChange(theme === 'dark' ? 'light' : 'dark')}
                 className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-purple-500 transition-all duration-200 ${
-                  theme === 'dark' 
-                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700' 
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700'
                     : 'bg-white border-gray-200 hover:bg-gray-50'
                 }`}
               >
@@ -706,6 +708,33 @@ export default function Home() {
                     </div>
                   </>
                 )}
+              </Button>
+            </div>
+
+            {/* Language Toggle */}
+            <div className="space-y-3">
+              <Button
+                variant="outline"
+                onClick={() => setLang(lang === 'he' ? 'en' : 'he')}
+                className={`w-full justify-start gap-3 h-12 text-left border-2 hover:border-teal-500 transition-all duration-200 ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-600 hover:bg-gray-700'
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="w-8 h-8 bg-teal-500/20 rounded-lg flex items-center justify-center">
+                  <span className="font-semibold">
+                    {lang === 'he' ? 'EN' : 'HE'}
+                  </span>
+                </div>
+                <div className="text-left">
+                  <div className="font-medium">
+                    {lang === 'he' ? 'English' : 'עברית'}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    {lang === 'he' ? 'Change language' : 'החלפת שפה'}
+                  </div>
+                </div>
               </Button>
             </div>
 

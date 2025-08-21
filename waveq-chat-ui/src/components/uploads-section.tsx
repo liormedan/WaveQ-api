@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { useTranslation } from '@/components/language-provider'
 import { 
   FileAudio, 
   FileText, 
@@ -36,6 +37,7 @@ interface UploadsSectionProps {
 }
 
 export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
+  const { t, lang } = useTranslation()
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [filterStatus, setFilterStatus] = useState<'all' | 'uploaded' | 'processed' | 'error'>('all')
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'size' | 'type'>('date')
@@ -81,7 +83,8 @@ export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
   }
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('he-IL', {
+    const locale = lang === 'he' ? 'he-IL' : 'en-US'
+    return date.toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
@@ -89,7 +92,8 @@ export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
   }
 
   const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('he-IL', {
+    const locale = lang === 'he' ? 'he-IL' : 'en-US'
+    return date.toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit'
     })
@@ -104,13 +108,13 @@ export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'uploaded':
-        return <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">הועלה</span>
+        return <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">{t('statusUploaded')}</span>
       case 'processed':
-        return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">עובד</span>
+        return <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">{t('statusProcessed')}</span>
       case 'error':
-        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">שגיאה</span>
+        return <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">{t('statusError')}</span>
       default:
-        return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">לא ידוע</span>
+        return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">{t('statusUnknown')}</span>
     }
   }
 
@@ -155,10 +159,10 @@ export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
         <CardContent className="p-8 text-center">
           <UploadIcon className={`w-16 h-16 mx-auto mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-300'}`} />
           <h3 className={`text-lg font-medium mb-2 ${theme === 'dark' ? 'text-gray-200' : 'text-gray-800'}`}>
-            אין קבצים שהועלו עדיין
+            {t('noUploadedFiles')}
           </h3>
           <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-            העלה קובץ אודיו כדי לראות אותו כאן
+            {t('uploadPrompt')}
           </p>
         </CardContent>
       </Card>
@@ -171,10 +175,10 @@ export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
           <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-            קבצים שהועלו
+            {t('uploadedFiles')}
           </h2>
           <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-            {uploadedFiles.length} קובץ הועלה בסך הכל
+            {t('totalFiles', { count: uploadedFiles.length })}
           </p>
         </div>
         
@@ -189,10 +193,10 @@ export function UploadsSection({ theme = 'light' }: UploadsSectionProps) {
                 : 'bg-white border-gray-300 text-gray-900'
             }`}
           >
-            <option value="all">כל הקבצים</option>
-            <option value="uploaded">הועלו</option>
-            <option value="processed">עובדו</option>
-            <option value="error">שגיאות</option>
+            <option value="all">{t('filterAll')}</option>
+            <option value="uploaded">{t('filterUploaded')}</option>
+            <option value="processed">{t('filterProcessed')}</option>
+            <option value="error">{t('filterError')}</option>
           </select>
           
           {/* Sort By */}
