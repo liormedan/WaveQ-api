@@ -11,6 +11,26 @@ from pathlib import Path
 # Provide a minimal stub for asyncio_mqtt to allow importing the server
 sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
 
+# Stub pkg_resources for webrtcvad if missing
+if "pkg_resources" not in sys.modules:
+    pkg_stub = types.ModuleType("pkg_resources")
+    pkg_stub.get_distribution = lambda name: types.SimpleNamespace(version="0.0")
+    sys.modules["pkg_resources"] = pkg_stub
+
+# Stub ffmpeg-python if not installed
+if "ffmpeg" not in sys.modules:
+    class _StubFFMPEG(types.ModuleType):
+        def input(self, file_path):
+            return file_path
+
+        def output(self, stream, out_path, format=None, **kwargs):
+            return out_path
+
+        def run(self, stream, overwrite_output=True):
+            Path(stream).touch()
+
+    sys.modules["ffmpeg"] = _StubFFMPEG("ffmpeg")
+
 # Provide a stub for audiomentations if it's not installed
 if "audiomentations" not in sys.modules:
     class _StubTransform:
@@ -38,7 +58,8 @@ if "audiomentations" not in sys.modules:
 # Ensure the project root is on the path when running tests directly
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
-
+import mcp_audio_server
+mcp_audio_server.ffmpeg = sys.modules["ffmpeg"]
 from mcp_audio_server import AudioProcessingMCP
 
 

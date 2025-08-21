@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, Depends, Header, status, File, Uploa
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import asyncio
 import json
 import os
@@ -11,6 +11,9 @@ import uuid
 from datetime import datetime
 import shutil
 from pathlib import Path
+import subprocess
+import tempfile
+import sys
 
 from dotenv import load_dotenv
 from llm_service import parse_request as llm_parse_request
@@ -118,6 +121,16 @@ class ChatRequest(BaseModel):
     client_id: Optional[str] = None
 
 
+class CodeRunRequest(BaseModel):
+    language: str
+    code: str
+
+
+class CodeRunResponse(BaseModel):
+    output: str
+    errors: str
+
+
 async def parse_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Parse chat request payload using the LLM service.
 
@@ -144,6 +157,28 @@ async def parse_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=502, detail=f"Invalid response from LLM: {error_msg}")
 
     return result["data"]
+
+
+def _execute_python(code: str) -> Tuple[str, str]:
+    """Execute Python code in a temporary file and return output and errors."""
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as tmp:
+        tmp.write(code)
+        tmp_path = tmp.name
+    try:
+        completed = subprocess.run(
+            [sys.executable, tmp_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env={"PYTHONIOENCODING": "utf-8"},
+            cwd="/tmp",
+        )
+        return completed.stdout, completed.stderr
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
 
 # MQTT Client for MCP communication
 class MCPClient:
@@ -440,6 +475,23 @@ async def llm_chat(request: ChatRequest):
     await update_request(request_id, status="completed", result=result)
 
     return {"request_id": request_id, "response": result}
+
+
+@app.post("/api/run-code", response_model=CodeRunResponse)
+async def run_code(request: CodeRunRequest):
+    """Run small code snippets in a restricted subprocess."""
+    if request.language.lower() != "python":
+        raise HTTPException(status_code=400, detail="Unsupported language")
+
+    if len(request.code) > 1000:
+        raise HTTPException(status_code=400, detail="Code too long")
+
+    try:
+        stdout, stderr = await asyncio.to_thread(_execute_python, request.code)
+    except subprocess.TimeoutExpired:
+        return CodeRunResponse(output="", errors="Execution timed out")
+
+    return CodeRunResponse(output=stdout, errors=stderr)
 
 @app.get("/api/audio/status/{request_id}", response_model=ProcessingStatus)
 async def get_processing_status(request_id: str):
