@@ -177,6 +177,24 @@ class AudioAgent:
                     "export as WAV with 44100 Hz",
                     "save as stereo FLAC"
                 ]
+            },
+            "voice_activity_detection": {
+                "aliases": [
+                    "detect voice",
+                    "voice activity",
+                    "remove silence",
+                    "trim silence",
+                    "cut silence",
+                    "silent parts",
+                    "detect speech"
+                ],
+                "description": "Detect where speech occurs or remove silent sections",
+                "parameters": ["remove_silence"],
+                "examples": [
+                    "detect where there is speech",
+                    "remove silent parts",
+                    "auto trim quiet sections"
+                ]
             }
         }
         
@@ -306,25 +324,16 @@ class AudioAgent:
             else:
                 parameters["duration"] = 1.0  # Default 1 second
 
-        elif operation == "augment":
-            perc_match = re.search(self.patterns["percentage"], text)
-            if perc_match:
-                parameters["noise_level"] = float(perc_match.group(1)) / 100.0
-            else:
-                noise_match = re.search(r"noise(?: level)?\s*(\d+(?:\.\d+)?)", text)
-                if noise_match:
-                    parameters["noise_level"] = float(noise_match.group(1))
-                else:
-                    parameters["noise_level"] = 0.02
 
-            semitone_match = re.search(self.patterns["semitone"], text)
-            if semitone_match:
-                steps = int(semitone_match.group(1))
-                if "lower" in text or "down" in text:
-                    steps = -steps
-                parameters["pitch_shift"] = steps
-            else:
-                parameters["pitch_shift"] = 0
+        elif operation == "voice_activity_detection":
+            remove_phrases = [
+                "remove silence",
+                "trim silence",
+                "cut silence",
+                "silent parts",
+            ]
+            parameters["remove_silence"] = any(p in text for p in remove_phrases)
+
 
         elif operation == "convert_format":
             # Extract format and quality
@@ -355,6 +364,7 @@ class AudioAgent:
         # Sort operations by priority and dependencies
         operation_order = [
             "noise_reduction",  # Do noise reduction first
+            "voice_activity_detection",
             "normalize",        # Then normalize
             "equalize",         # Then equalize
             "compress",         # Then compress

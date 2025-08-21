@@ -17,6 +17,7 @@ import uuid
 from pydub import AudioSegment, effects
 import soundfile as sf
 import librosa
+import webrtcvad
 
 from audiomentations import Compose, AddGaussianNoise, PitchShift
 
@@ -191,18 +192,54 @@ class AudioProcessingMCP:
         processed.export(out_path, format="wav")
         return {"output_path": str(out_path)}
 
-    async def augment_audio(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        noise_level = params.get("noise_level", 0.02)
-        pitch_shift = params.get("pitch_shift", 0)
-        samples, sample_rate = librosa.load(file_path, sr=None)
-        augment = Compose([
-            AddGaussianNoise(min_amplitude=0.0, max_amplitude=noise_level, p=0.5),
-            PitchShift(min_semitones=pitch_shift, max_semitones=pitch_shift, p=0.5),
-        ])
-        augmented = augment(samples=samples, sample_rate=sample_rate)
-        out_path = self.processed_dir / f"augment_{Path(file_path).stem}.wav"
-        sf.write(out_path, augmented, sample_rate)
-        return {"output_path": str(out_path)}
+
+    async def voice_activity_detection(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Detect voice activity or remove silent segments using WebRTC VAD"""
+        aggressiveness = int(params.get("aggressiveness", 2))
+        remove_silence = params.get("remove_silence", False)
+
+        audio = (
+            AudioSegment.from_file(file_path)
+            .set_frame_rate(16000)
+            .set_channels(1)
+            .set_sample_width(2)
+        )
+        raw = audio.raw_data
+        sample_rate = audio.frame_rate
+        frame_ms = 30
+        frame_bytes = int(sample_rate * frame_ms / 1000) * audio.sample_width
+
+        vad = webrtcvad.Vad(aggressiveness)
+        segments: List[Dict[str, float]] = []
+        start: Optional[float] = None
+
+        for i in range(0, len(raw), frame_bytes):
+            frame = raw[i : i + frame_bytes]
+            if len(frame) < frame_bytes:
+                break
+            is_speech = vad.is_speech(frame, sample_rate)
+            t = (i // frame_bytes) * (frame_ms / 1000.0)
+            if is_speech and start is None:
+                start = t
+            elif not is_speech and start is not None:
+                segments.append({"start": start, "end": t})
+                start = None
+
+        if start is not None:
+            segments.append({"start": start, "end": len(audio) / 1000.0})
+
+        result: Dict[str, Any] = {"voice_segments": segments}
+
+        if remove_silence and segments:
+            combined = AudioSegment.empty()
+            for seg in segments:
+                combined += audio[int(seg["start"] * 1000) : int(seg["end"] * 1000)]
+            out_path = self.processed_dir / f"vad_{Path(file_path).stem}.wav"
+            combined.export(out_path, format="wav")
+            result["output_path"] = str(out_path)
+
+        return result
+
 
     async def merge_audio_files(self, file_path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         files = [file_path] + params.get("additional_files", [])
@@ -257,7 +294,9 @@ class AudioProcessingMCP:
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
-            "augment": self.augment_audio,
+
+            "voice_activity_detection": self.voice_activity_detection,
+
         }
         for op in operations:
             name = op.get("name")
@@ -294,7 +333,9 @@ class AudioProcessingMCP:
             "noise_reduction": self.noise_reduction,
             "equalize": self.equalize_audio,
             "compress": self.compress_audio,
-            "augment": self.augment_audio,
+
+            "voice_activity_detection": self.voice_activity_detection,
+
             "merge": self.merge_audio_files,
             "split": self.split_audio,
             "convert": self.convert_format,
