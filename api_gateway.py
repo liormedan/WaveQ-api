@@ -14,6 +14,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import sys
+import logging
 
 from dotenv import load_dotenv
 from llm_service import parse_request as llm_parse_request
@@ -60,6 +61,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('api_gateway.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Configuration
 MCP_MQTT_BROKER = os.getenv("MCP_MQTT_BROKER", "localhost")
@@ -202,9 +214,11 @@ class MCPClient:
             await self.client.subscribe("audio/status/#")
             # Start background listener for status messages
             self.status_task = asyncio.create_task(self.listen_status_updates())
-            print(f"Connected to MQTT broker at {MCP_MQTT_BROKER}:{MCP_MQTT_PORT}")
+            logger.info(
+                f"Connected to MQTT broker at {MCP_MQTT_BROKER}:{MCP_MQTT_PORT}"
+            )
         except Exception as e:
-            print(f"Failed to connect to MQTT broker: {e}")
+            logger.error(f"Failed to connect to MQTT broker: {e}")
             self.connected = False
     
     async def disconnect(self):
@@ -214,6 +228,7 @@ class MCPClient:
                 self.status_task.cancel()
             await self.client.disconnect()
             self.connected = False
+            logger.info("Disconnected from MQTT broker")
     
     async def publish_request(self, request_id: str, payload: Dict[str, Any]):
         """Publish audio processing request to MCP server"""
@@ -249,7 +264,7 @@ class MCPClient:
                             active_requests[request_id]["status"] = payload.get("status", "unknown")
                             active_requests[request_id]["last_update"] = payload
                     except Exception as e:
-                        print(f"Error processing status message: {e}")
+                        logger.error(f"Error processing status message: {e}")
         except asyncio.CancelledError:
             pass
 
@@ -267,7 +282,7 @@ async def save_request(request_id: str, data: Dict[str, Any]):
         try:
             await redis_client.set(f"request:{request_id}", json.dumps(data))
         except Exception as e:  # pragma: no cover - redis optional
-            print(f"Redis save error: {e}")
+            logger.error(f"Redis save error: {e}")
 
 
 async def get_request(request_id: str) -> Optional[Dict[str, Any]]:
@@ -278,7 +293,7 @@ async def get_request(request_id: str) -> Optional[Dict[str, Any]]:
             if stored:
                 return json.loads(stored)
         except Exception as e:  # pragma: no cover
-            print(f"Redis get error: {e}")
+            logger.error(f"Redis get error: {e}")
     return active_requests.get(request_id)
 
 
@@ -717,7 +732,7 @@ async def monitor_mcp_status():
                 await mcp_client.connect()
             await asyncio.sleep(30)  # Check every 30 seconds
         except Exception as e:
-            print(f"Error monitoring MCP status: {e}")
+            logger.error(f"Error monitoring MCP status: {e}")
             await asyncio.sleep(60)  # Wait longer on error
 
 # Start monitoring task
