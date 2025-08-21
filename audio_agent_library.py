@@ -140,6 +140,24 @@ class AudioAgent:
                     "squash the peaks"
                 ]
             },
+            "augment": {
+                "aliases": [
+                    "augment",
+                    "augmentation",
+                    "randomize",
+                    "randomise",
+                    "add noise",
+                    "noise",
+                    "pitch shift"
+                ],
+                "description": "Apply random audio augmentations like noise and pitch shift",
+                "parameters": ["noise_level", "pitch_shift"],
+                "examples": [
+                    "augment with noise 5% and pitch up 2 semitones",
+                    "add noise and random pitch shift",
+                    "randomize the audio"
+                ]
+            },
             "merge": {
                 "aliases": ["combine", "join", "concatenate", "add"],
                 "description": "Merge multiple audio files",
@@ -168,6 +186,24 @@ class AudioAgent:
                     "convert to MP3 at 128k",
                     "export as WAV with 44100 Hz",
                     "save as stereo FLAC"
+                ]
+            },
+            "voice_activity_detection": {
+                "aliases": [
+                    "detect voice",
+                    "voice activity",
+                    "remove silence",
+                    "trim silence",
+                    "cut silence",
+                    "silent parts",
+                    "detect speech"
+                ],
+                "description": "Detect where speech occurs or remove silent sections",
+                "parameters": ["remove_silence"],
+                "examples": [
+                    "detect where there is speech",
+                    "remove silent parts",
+                    "auto trim quiet sections"
                 ]
             }
         }
@@ -309,7 +345,18 @@ class AudioAgent:
                 parameters["duration"] = float(time_match.group(1))
             else:
                 parameters["duration"] = 1.0  # Default 1 second
-        
+
+
+        elif operation == "voice_activity_detection":
+            remove_phrases = [
+                "remove silence",
+                "trim silence",
+                "cut silence",
+                "silent parts",
+            ]
+            parameters["remove_silence"] = any(p in text for p in remove_phrases)
+
+
         elif operation == "convert_format":
             # Extract format and quality
             format_match = re.search(self.patterns["format"], text)
@@ -339,6 +386,7 @@ class AudioAgent:
         # Sort operations by priority and dependencies
         operation_order = [
             "noise_reduction",  # Do noise reduction first
+            "voice_activity_detection",
             "normalize",        # Then normalize
             "equalize",         # Then equalize
             "compress",         # Then compress
@@ -349,6 +397,7 @@ class AudioAgent:
             "change_speed",    # Then speed/pitch changes
             "change_pitch",
             "add_reverb",      # Then effects
+            "augment",
             "split",           # Then structural changes
             "merge",
             "convert_format"   # Convert format last

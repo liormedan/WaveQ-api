@@ -123,8 +123,10 @@ def test_chat_audio_llm_error(client, monkeypatch):
     assert response.status_code == 502
 
 
+
 def test_supported_operations_include_time_stretch(client):
     response = client.get("/api/audio/operations")
     assert response.status_code == 200
     ops = response.json()["operations"]
     assert "time_stretch_torch" in ops
+

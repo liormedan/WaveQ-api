@@ -11,6 +11,7 @@ from pathlib import Path
 # Provide a minimal stub for asyncio_mqtt to allow importing the server
 sys.modules.setdefault("asyncio_mqtt", types.ModuleType("asyncio_mqtt"))
 
+
 # Provide a minimal stub for torchaudio to avoid heavy dependency
 ta = types.ModuleType("torchaudio")
 
@@ -36,10 +37,12 @@ ta.save = _save
 ta.sox_effects = _SoxEffects()
 sys.modules.setdefault("torchaudio", ta)
 
+
 # Ensure the project root is on the path when running tests directly
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT))
-
+import mcp_audio_server
+mcp_audio_server.ffmpeg = sys.modules["ffmpeg"]
 from mcp_audio_server import AudioProcessingMCP
 
 
@@ -66,7 +69,9 @@ def sample_wav(tmp_path):
         ("noise_reduction", {"strength": 0.1}),
         ("equalize_audio", {"low_gain": 1.0, "mid_gain": 1.0, "high_gain": 1.0}),
         ("compress_audio", {"threshold": -20}),
+
         ("torch_time_stretch", {"rate": 1.2}),
+
     ],
 )
 def test_audio_operations(sample_wav, operation, params):
@@ -106,6 +111,7 @@ def test_process_operations(sample_wav):
     server = AudioProcessingMCP()
     ops = [
         {"name": "trim", "start": 0, "end": 0.5},
+        {"name": "augment", "noise_level": 0.01, "pitch_shift": 0},
         {"name": "fade_in", "duration": 100},
     ]
     out_path = asyncio.run(server.process_operations(sample_wav, ops))
