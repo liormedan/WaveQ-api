@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-50 font-sans">
+    {% if user %}
     <div x-data="analyticsManager()" class="min-h-screen">
         <!-- Sidebar -->
         <div class="fixed inset-y-0 right-0 z-50 w-64 bg-gradient-to-b from-purple-600 to-purple-800 shadow-lg">
@@ -231,6 +232,12 @@
             </main>
         </div>
     </div>
+    {% else %}
+    <div class="min-h-screen flex flex-col items-center justify-center">
+        <p class="text-red-600 mb-4">אין לך הרשאה לצפות בדף זה.</p>
+        <a href="/login" class="text-purple-600 underline">לעמוד ההתחברות</a>
+    </div>
+    {% endif %}
 
     <script>
         function analyticsManager() {
