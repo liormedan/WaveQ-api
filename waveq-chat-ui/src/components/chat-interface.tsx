@@ -116,6 +116,7 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [statusMessage, setStatusMessage] = useState('')
+  const [executionResult, setExecutionResult] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -297,6 +298,57 @@ export function ChatInterface({ theme = 'light' }: ChatInterfaceProps) {
       originalAudioFile: undefined // Remove File objects before saving
     }))
     localStorage.setItem('WAVEQ_CHAT_HISTORY', JSON.stringify(messagesForStorage))
+  }
+
+  // Execute sandbox code and display the result or any errors
+  const handleRun = async (code: string) => {
+    try {
+      const res = await fetch('/api/sandbox/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      })
+
+      const data = await res.json()
+
+      if (data.error) {
+        const errorMsg = data.error || 'Unknown execution error'
+        const errorMessage: ChatMessage = {
+          id: Date.now().toString(),
+          text: `❌ ${errorMsg}`,
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+        const updated = [...messages, errorMessage]
+        setMessages(updated)
+        saveMessagesToStorage(updated)
+        setExecutionResult(errorMsg)
+      } else {
+        const output = data.output || ''
+        const outputMessage: ChatMessage = {
+          id: Date.now().toString(),
+          text: output || '✅ Completed with no output',
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+        const updated = [...messages, outputMessage]
+        setMessages(updated)
+        saveMessagesToStorage(updated)
+        setExecutionResult(output)
+      }
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Execution failed'
+      const errorMessage: ChatMessage = {
+        id: Date.now().toString(),
+        text: `❌ ${errorMsg}`,
+        sender: 'assistant',
+        timestamp: new Date()
+      }
+      const updated = [...messages, errorMessage]
+      setMessages(updated)
+      saveMessagesToStorage(updated)
+      setExecutionResult(errorMsg)
+    }
   }
 
   const handleSendMessage = async () => {
@@ -816,13 +868,13 @@ ${audioAnalysis.quickActions}
               </div>
             ))}
             
-                         {isLoading && (
+            {isLoading && (
                <div className="flex gap-3">
-                 <Avatar className="w-8 h-8">
-                   <AvatarFallback className="bg-purple-500">
-                     <Bot className="w-4 h-4 text-white" />
-                   </AvatarFallback>
-                 </Avatar>
+                <Avatar className="w-8 h-8">
+                  <AvatarFallback className="bg-purple-500">
+                    <Bot className="w-4 h-4 text-white" />
+                  </AvatarFallback>
+                </Avatar>
                  <div className={`p-4 rounded-2xl shadow-sm ${
                    theme === 'dark' 
                      ? 'bg-gray-800 text-gray-100 border border-gray-700' 
@@ -847,16 +899,23 @@ ${audioAnalysis.quickActions}
                       </span>
                    </div>
                  </div>
-               </div>
-             )}
+              </div>
+            )}
           </div>
-
-                           
+          {executionResult && (
+            <div className={`border-t p-4 ${
+              theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-white border-gray-200'
+            }`}>
+              <pre className={`whitespace-pre-wrap text-sm overflow-x-auto ${
+                theme === 'dark' ? 'text-gray-200' : 'text-gray-800'
+              }`}>{executionResult}</pre>
+            </div>
+          )}
 
                            {/* Message Input */}
                  <div className={`border-t p-4 ${
-                   theme === 'dark' 
-                     ? 'bg-gray-900 border-gray-700' 
+                   theme === 'dark'
+                     ? 'bg-gray-900 border-gray-700'
                      : 'bg-white border-gray-200'
                  }`}>
                                        <div className="flex gap-3">
