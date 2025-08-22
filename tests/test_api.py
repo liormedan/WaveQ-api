@@ -27,6 +27,10 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(api_gateway, "UPLOAD_DIR", tmp_path)
     monkeypatch.setattr(api_gateway, "PROCESSED_DIR", tmp_path)
+
+    api_gateway.active_requests.clear()
+    # Mock MQTT interactions
+
     monkeypatch.setattr(api_gateway.mcp_client, "connect", AsyncMock())
     monkeypatch.setattr(api_gateway.mcp_client, "publish_request", AsyncMock(return_value=True))
 
@@ -150,4 +154,34 @@ def test_supported_operations_include_time_stretch(client):
     assert response.status_code == 200
     ops = response.json()["operations"]
     assert "time_stretch_torch" in ops
+
+
+def test_cleanup_file_removes_path(tmp_path):
+    temp = tmp_path / "temp.txt"
+    temp.write_text("hi")
+    api_gateway.cleanup_file(temp)
+    assert not temp.exists()
+
+
+def test_download_removes_files(client, tmp_path):
+    audio = io.BytesIO(b"test audio")
+    resp = client.post(
+        "/api/audio/edit",
+        data={"operation": "trim", "parameters": "{}"},
+        files={"audio_file": ("test.wav", audio, "audio/wav")},
+    )
+    request_id = resp.json()["request_id"]
+    original = tmp_path / f"{request_id}_test.wav"
+    assert original.exists()
+
+    original_stem = original.stem
+    api_gateway.handle_status_update(request_id, "completed", {})
+    assert not original.exists()
+
+    processed = tmp_path / f"{original_stem}_out.wav"
+    processed.write_bytes(b"processed")
+
+    response = client.get(f"/api/audio/download/{request_id}")
+    assert response.status_code == 200
+    assert not processed.exists()
 

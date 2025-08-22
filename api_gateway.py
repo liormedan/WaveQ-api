@@ -13,19 +13,12 @@ from pathlib import Path
 import subprocess
 import tempfile
 import sys
-import logging  # added
 
-from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
+import contextlib
 
-import database
-from database import get_db
-from crud import (
-    create_request,
-    update_request_status,
-    get_request as db_get_request,
-    list_requests as db_list_requests,
-)
-from models import APIRequest
+from file_utils import cleanup_file, cleanup_old_files
+
 
 from dotenv import load_dotenv
 from llm_service import parse_request as llm_parse_request
@@ -91,6 +84,7 @@ MCP_MQTT_PORT = int(os.getenv("MCP_MQTT_PORT", "1883"))
 UPLOAD_DIR = "uploads"
 PROCESSED_DIR = "processed"
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+FILE_RETENTION_SECONDS = int(os.getenv("FILE_RETENTION_SECONDS", "3600"))
 
 # Ensure directories exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -269,16 +263,12 @@ class MCPClient:
                         continue
                     try:
                         payload = json.loads(message.payload.decode())
-                        req_id = payload.get("request_id")
-                        if req_id:
-                            with database.SessionLocal() as db:
-                                update_request_status(
-                                    db,
-                                    req_id,
-                                    status=payload.get("status", "unknown"),
-                                    progress=payload.get("progress"),
-                                    result=payload.get("result"),
-                                )
+
+                        request_id = payload.get("request_id")
+                        status = payload.get("status", "unknown")
+                        if request_id:
+                            handle_status_update(request_id, status, payload)
+
                     except Exception as e:
                         logger.error(f"Error processing status message: {e}")
         except asyncio.CancelledError:
@@ -293,6 +283,28 @@ mcp_client = MCPClient()
 # In-memory / Redis request cache
 # =========================
 active_requests: Dict[str, Dict[str, Any]] = {}
+
+def handle_status_update(request_id: str, status: str, payload: Dict[str, Any]):
+    """Update request status and cleanup files when finished."""
+    if request_id in active_requests:
+        active_requests[request_id]["status"] = status
+        active_requests[request_id]["last_update"] = payload
+        if status in ("completed", "failed", "cancelled"):
+            cleanup_file(active_requests[request_id].get("file_path"))
+
+
+async def cleanup_old_files_task():
+    """Periodically remove old files from upload and processed directories."""
+    while True:
+        cleanup_old_files(UPLOAD_DIR, FILE_RETENTION_SECONDS)
+        cleanup_old_files(PROCESSED_DIR, FILE_RETENTION_SECONDS)
+        await asyncio.sleep(FILE_RETENTION_SECONDS)
+
+
+def _cleanup_processed_and_original(processed_path: str, original_path: str) -> None:
+    cleanup_file(processed_path)
+    cleanup_file(original_path)
+
 
 async def save_request(request_id: str, data: Dict[str, Any]):
     """Save request data to memory and Redis if available"""
@@ -327,11 +339,17 @@ async def startup_event():
     """Initialize MCP client on startup"""
     database.Base.metadata.create_all(bind=database.engine)
     await mcp_client.connect()
+    app.state.cleanup_task = asyncio.create_task(cleanup_old_files_task())
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown"""
     await mcp_client.disconnect()
+    task = getattr(app.state, "cleanup_task", None)
+    if task:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 # =========================
 # Routes
@@ -585,7 +603,12 @@ async def download_processed_audio(request_id: str, db: Session = Depends(get_db
     return FileResponse(
         path=str(latest_file),
         filename=latest_file.name,
-        media_type="audio/wav"
+        media_type="audio/wav",
+        background=BackgroundTask(
+            _cleanup_processed_and_original,
+            str(latest_file),
+            str(original_file),
+        ),
     )
 
 @app.delete("/api/audio/requests/{request_id}")
@@ -600,11 +623,9 @@ async def cancel_request(request_id: str, db: Session = Depends(get_db)):
 
     update_request_status(db, request_id, status="cancelled")
 
-    if request_obj.file_path and os.path.exists(request_obj.file_path):
-        try:
-            os.remove(request_obj.file_path)
-        except OSError as e:
-            logger.warning(f"Failed to remove file {request_obj.file_path}: {e}")
+
+    cleanup_file(request_info.get("file_path"))
+
 
     return {"message": "Request cancelled successfully", "request_id": request_id}
 
