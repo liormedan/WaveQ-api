@@ -1,4 +1,17 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, status, File, UploadFile, Form
+ codex/install-and-configure-slowapi-in-api_gateway.py
+
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Depends,
+    Header,
+    status,
+    File,
+    UploadFile,
+    Form,
+    Request,
+)
+
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,6 +42,10 @@ from models import APIRequest
 
 from dotenv import load_dotenv
 from llm_service import parse_request as llm_parse_request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Optional deps
 try:
@@ -40,6 +57,8 @@ try:
     import aiomqtt  # added: MQTT async client
 except ImportError:
     aiomqtt = None
+
+limiter = Limiter(key_func=get_remote_address)
 
 # Load environment variables
 load_dotenv("config.env", override=True)
@@ -65,6 +84,9 @@ app = FastAPI(
     dependencies=[Depends(verify_api_key)],
 )
 
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -74,16 +96,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Logging configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('api_gateway.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429, content={"detail": "Rate limit exceeded"})
+
 
 # Configuration
 MCP_MQTT_BROKER = os.getenv("MCP_MQTT_BROKER", "localhost")
@@ -337,7 +355,9 @@ async def shutdown_event():
 # Routes
 # =========================
 @app.post("/api/audio/edit", response_model=AudioEditResponse)
+@limiter.limit("5/minute")
 async def submit_audio_edit(
+    request: Request,
     audio_file: UploadFile = File(...),
     operation: str = Form(...),
     parameters: str = Form("{}"),
@@ -412,7 +432,9 @@ async def submit_audio_edit(
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 @app.post("/api/chat/audio")
+@limiter.limit("5/minute")
 async def chat_audio(
+    request: Request,
     message: str = Form(...),
     audio_file: UploadFile = File(...),
     client_id: Optional[str] = Form(None),
@@ -477,16 +499,21 @@ async def chat_audio(
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 @app.post("/api/llm/chat")
-async def llm_chat(request: ChatRequest, db: Session = Depends(get_db)):
+
+@limiter.limit("5/minute")
+async def llm_chat(request: Request, chat_request: ChatRequest):
     """Handle chat requests for LLM processing"""
     request_id = str(uuid.uuid4())
-    payload = request.dict()
-    create_request(
-        db,
+    payload = chat_request.dict()
+    await save_request(
         request_id,
-        status="submitted",
-        payload=payload,
-        client_id=request.client_id,
+        {
+            "status": "submitted",
+            "payload": payload,
+            "submitted_at": datetime.now().isoformat(),
+            "client_id": chat_request.client_id,
+        },
+
     )
     try:
         result = await parse_request(payload)
