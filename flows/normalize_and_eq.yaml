@@ -1,0 +1,6 @@
+workflow_name: normalize_and_eq
+steps:
+  - name: normalize
+    type: trim
+  - name: eq
+    type: equalize
