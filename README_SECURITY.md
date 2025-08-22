@@ -53,7 +53,6 @@ copy config.env.example config.env
 
 # או הפעל ידנית
 python main.py
-python api_gateway.py
 ```
 
 ### **3. בדיקת אבטחה:**

@@ -36,30 +36,6 @@ services:
     restart: unless-stopped
     command: python mcp_audio_server.py
 
-  # API Gateway
-  api-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile.gateway
-    container_name: waveq-api-gateway
-    ports:
-      - "8002:8002"
-    environment:
-      - MCP_MQTT_BROKER=mqtt-broker
-      - MCP_MQTT_PORT=1883
-      - MCP_MQTT_WS_PORT=9001
-    volumes:
-      - ./uploads:/app/uploads
-      - ./processed:/app/processed
-      - ./logs:/app/logs
-    depends_on:
-      - mqtt-broker
-      - mcp-audio-server
-    networks:
-      - waveq-network
-    restart: unless-stopped
-    command: python api_gateway.py
-
   # Web Dashboard (Optional)
   web-dashboard:
     build:
@@ -68,10 +44,8 @@ services:
     container_name: waveq-dashboard
     ports:
       - "8001:8001"
-    environment:
-      - API_GATEWAY_URL=http://api-gateway:8002
     depends_on:
-      - api-gateway
+      - mcp-audio-server
     networks:
       - waveq-network
     restart: unless-stopped

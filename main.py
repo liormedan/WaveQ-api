@@ -30,7 +30,6 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import json
 from typing import List, Optional
-import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import Base, engine, get_db, SessionLocal
@@ -222,42 +221,6 @@ async def auth_exception_handler(request: Request, exc: HTTPException):
         return templates.TemplateResponse("unauthorized.html", {"request": request}, status_code=exc.status_code)
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
-# Security: Input validation models
-class AudioEditRequestModel(BaseModel):
-    client_name: str
-    audio_file: str
-    edit_type: str
-    description: str
-    priority: str = "normal"
-    
-    @validator('client_name')
-    def validate_client_name(cls, v):
-        if not re.match(r'^[a-zA-Z0-9\s\-_]{1,50}$', v):
-            raise ValueError('Client name must be alphanumeric with spaces, hyphens, and underscores only')
-        return v.strip()
-    
-    @validator('audio_file')
-    def validate_audio_file(cls, v):
-        allowed_extensions = ['.wav', '.mp3', '.flac', '.aac', '.ogg']
-        if not any(v.lower().endswith(ext) for ext in allowed_extensions):
-            raise ValueError('Invalid audio file format')
-        return v
-    
-    @validator('edit_type')
-    def validate_edit_type(cls, v):
-        allowed_types = ['trim', 'normalize', 'fade_in', 'fade_out', 'speed_change', 
-                        'pitch_change', 'reverb', 'noise_reduction', 'equalize', 
-                        'compress', 'merge', 'split', 'convert_format']
-        if v not in allowed_types:
-            raise ValueError('Invalid edit type')
-        return v
-    
-    @validator('priority')
-    def validate_priority(cls, v):
-        if v not in ['low', 'normal', 'high', 'urgent']:
-            raise ValueError('Invalid priority level')
-        return v
-
 class ClientBase(BaseModel):
     name: str
     email: EmailStr
@@ -379,73 +342,6 @@ async def chat_page(request: Request, user: User = Depends(get_current_user)):
 @app.post("/chat")
 async def handle_chat(file: UploadFile = File(...), message: str = Form(...)):
     return {"filename": file.filename, "message": message}
-
-# API endpoint for n8n to submit audio editing requests
-@app.post("/api/audio-edit")
-@limiter.limit("10/minute")  # Security: Rate limiting
-async def submit_audio_edit_request(
-    request: Request,  # Required for rate limiting
-    client_name: str = Form(...),
-    audio_file: UploadFile = File(...),
-    edit_type: str = Form(...),
-    description: str = Form(...),
-    priority: str = Form("normal"),
-    db: Session = Depends(get_db)
-):
-    try:
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_id = str(uuid.uuid4())
-        file_extension = os.path.splitext(audio_file.filename)[1] or ".wav"
-        file_path = os.path.join(upload_dir, f"{file_id}{file_extension}")
-
-        with open(file_path, "wb") as buffer:
-            content = await audio_file.read()
-            buffer.write(content)
-
-        # Security: Input validation
-        request_data = AudioEditRequestModel(
-            client_name=client_name,
-            audio_file=file_path,
-            edit_type=edit_type,
-            description=description,
-            priority=priority
-        )
-
-        # Security: Sanitize description
-        sanitized_description = re.sub(r'<[^>]+>', '', description)  # Remove HTML tags
-        sanitized_description = sanitized_description[:500]  # Limit length
-
-        new_request = AudioEditRequest(
-            client_name=request_data.client_name,
-            audio_file=request_data.audio_file,
-            edit_type=request_data.edit_type,
-            description=sanitized_description,
-            priority=request_data.priority
-        )
-        db.add(new_request)
-        db.flush()
-        new_request.request_id = f"REQ-{new_request.id:06d}"
-        db.commit()
-        db.refresh(new_request)
-
-        await ws_manager.broadcast(request_to_dict(new_request))
-
-        # Security: Log the request
-        logger.info(f"Audio edit request submitted: {new_request.request_id} by {request_data.client_name}")
-
-        return {
-            "success": True,
-            "request_id": new_request.request_id,
-            "message": "Audio edit request submitted successfully",
-            "status": "pending"
-        }
-    except ValueError as e:
-        logger.warning(f"Invalid input data: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error processing request: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Get all API requests
 @app.get("/api/requests")
