@@ -12,8 +12,8 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 import asyncio
 
-# Import our Audio Agent
-from audio_agent_library import AudioAgent
+# Import our Audio Agent and exposed operations
+from audio_agent_library import AudioAgent, V1_OPERATIONS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -79,7 +79,17 @@ Always be helpful, clear, and professional. If you're unsure about something, as
         operation_chain = self.audio_agent.generate_operation_chain(
             parsed_operations["operations"]
         )
-        
+
+        # Validate operations against API v1 allowed set
+        unsupported = [
+            op["operation"] for op in operation_chain
+            if op["operation"] not in V1_OPERATIONS
+        ]
+        if unsupported:
+            raise ValueError(
+                f"Unsupported operations requested: {', '.join(unsupported)}"
+            )
+
         # Step 3: Create processing request
         processing_request = self.audio_agent.create_processing_request(
             operation_chain, audio_file

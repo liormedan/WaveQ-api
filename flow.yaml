@@ -1,0 +1,40 @@
+operations:
+  noise_reduction:
+    priority: 1
+    parameters:
+      strength:
+        type: float
+        description: Amount of noise reduction to apply
+  normalize:
+    priority: 2
+    parameters:
+      target_db:
+        type: float
+        description: Target decibel level
+  equalize:
+    priority: 3
+    parameters:
+      low_gain:
+        type: float
+        description: Low frequency gain adjustment
+      mid_gain:
+        type: float
+        description: Mid frequency gain adjustment
+      high_gain:
+        type: float
+        description: High frequency gain adjustment
+  trim:
+    priority: 4
+    parameters:
+      start_time:
+        type: float
+        description: Start time in seconds
+      end_time:
+        type: float
+        description: End time in seconds
+  merge:
+    priority: 5
+    parameters:
+      additional_files:
+        type: list[str]
+        description: List of audio file paths to merge

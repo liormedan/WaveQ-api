@@ -17,8 +17,8 @@ import uuid
 from datetime import datetime
 import logging
 
-# Import our Audio Agent
-from audio_agent_library import AudioAgent
+# Import our Audio Agent and exposed operations
+from audio_agent_library import AudioAgent, V1_OPERATIONS
 from gemini_audio_integration import GeminiAudioIntegration
 
 # Configure logging
@@ -134,7 +134,13 @@ async def process_natural_language_audio(
             gemini_insights=result.get("gemini_insights"),
             timestamp=result["timestamp"]
         )
-        
+
+    except ValueError as e:
+        logger.warning(f"Unsupported operations requested: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
         logger.error(f"Error processing natural language request: {e}")
         raise HTTPException(
@@ -200,7 +206,13 @@ async def process_audio_upload(
             gemini_insights=result.get("gemini_insights"),
             timestamp=result["timestamp"]
         )
-        
+
+    except ValueError as e:
+        logger.warning(f"Unsupported operations requested: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
         logger.error(f"Error processing audio upload: {e}")
         raise HTTPException(
@@ -213,8 +225,8 @@ async def get_supported_operations():
     """Get list of supported audio operations with examples"""
     try:
         return {
-            "operations": audio_agent.supported_operations,
-            "total_operations": len(audio_agent.supported_operations),
+            "operations": V1_OPERATIONS,
+            "total_operations": len(V1_OPERATIONS),
             "agent_version": "1.0.0",
             "timestamp": datetime.now().isoformat()
         }
@@ -229,8 +241,17 @@ async def get_supported_operations():
 async def get_help_text():
     """Get help text for supported operations"""
     try:
+        help_text = "🎵 WaveQ Audio Agent - Supported Operations:\n\n"
+        for operation, info in V1_OPERATIONS.items():
+            help_text += f"🔧 {operation.upper()}\n"
+            help_text += f"   Description: {info['description']}\n"
+            help_text += f"   Aliases: {', '.join(info['aliases'])}\n"
+            help_text += f"   Examples:\n"
+            for example in info['examples']:
+                help_text += f"     • {example}\n"
+            help_text += "\n"
         return {
-            "help_text": audio_agent.get_help_text(),
+            "help_text": help_text,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
