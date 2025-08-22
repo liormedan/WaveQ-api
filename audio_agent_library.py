@@ -447,7 +447,7 @@ class AudioAgent:
             request["operations"].append(system_op)
         
         return request
-    
+
     def get_help_text(self) -> str:
         """Get help text for supported operations"""
         help_text = "🎵 WaveQ Audio Agent - Supported Operations:\n\n"
@@ -462,6 +462,18 @@ class AudioAgent:
             help_text += "\n"
         
         return help_text
+
+# Expose limited set of operations for API v1
+V1_OPERATIONS = {
+    op: AudioAgent().supported_operations[op]
+    for op in [
+        "trim",
+        "normalize",
+        "noise_reduction",
+        "equalize",
+        "merge",
+    ]
+}
 
 # Example usage
 if __name__ == "__main__":
