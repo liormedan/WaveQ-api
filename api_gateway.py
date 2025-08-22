@@ -28,7 +28,9 @@ from crud import (
 from models import APIRequest
 
 from dotenv import load_dotenv
-from llm_service import parse_request as llm_parse_request
+
+import asyncio_mqtt as aiomqtt
+
 
 # Optional deps
 try:
